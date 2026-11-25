@@ -1,0 +1,4475 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TXLC 服务控制台</title>
+<style>
+  :root {
+    --bg: #eef3f9;
+    --surface: #ffffff;
+    --surface-soft: #f8fafc;
+    --text: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --line-strong: #cbd5e1;
+    --brand: #2563eb;
+    --brand-dark: #1d4ed8;
+    --brand-soft: #eff6ff;
+    --green: #15803d;
+    --green-bg: #dcfce7;
+    --red: #b91c1c;
+    --red-bg: #fee2e2;
+    --amber: #b45309;
+    --amber-bg: #fef3c7;
+    --violet: #7e22ce;
+    --violet-bg: #f3e8ff;
+    --header: #0b1220;
+    --console: #0b1220;
+    --console-text: #dbeafe;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 14px 36px rgba(15, 23, 42, 0.08);
+    --radius: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(37, 99, 235, 0.11), transparent 30rem),
+      radial-gradient(circle at 94% 6%, rgba(14, 165, 233, 0.09), transparent 26rem),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 22px 32px;
+    background: linear-gradient(135deg, #0b1220 0%, #111c33 58%, #17223d 100%);
+    color: #f8fafc;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  }
+
+  .brand { display: flex; align-items: center; gap: 13px; }
+  .brand-mark {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+  }
+  h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+  .subtitle { margin: 4px 0 0; color: #94a3b8; font-size: 12.5px; }
+
+  .global-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  header .btn {
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+  header .btn:hover { color: #fff; background: rgba(255, 255, 255, 0.13); border-color: rgba(255, 255, 255, 0.28); }
+  header .btn.primary { color: #fff; background: #2563eb; border-color: #2563eb; box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35); }
+  header .btn.primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+  header .btn.danger { color: #fecaca; background: rgba(220, 38, 38, 0.12); border-color: rgba(248, 113, 113, 0.33); }
+  header .btn.danger:hover { background: rgba(220, 38, 38, 0.2); }
+  header .btn.ghost { background: transparent; }
+
+  main { max-width: 1660px; margin: 0 auto; padding: 22px 32px 44px; }
+
+  .summary {
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 0 0 20px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+  }
+  .summary-item { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .summary-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
+  .summary-value { font-size: 24px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .summary-value.bad { color: #b91c1c; }
+  .summary-total { color: var(--muted); font-size: 13px; }
+  .summary-text { color: var(--text); font-size: 13px; font-weight: 500; }
+  .summary-muted { color: var(--muted); font-size: 12px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+  }
+
+  /* 后端 / 前端用 tab 切换。 */
+  .list-tabs {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    width: max-content;
+    max-width: 100%;
+    margin: 0 0 16px;
+    padding: 4px;
+    background: #eef2f7;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .list-tab {
+    appearance: none;
+    padding: 7px 12px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
+    transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  }
+  .list-tab:hover { color: var(--text); }
+  .list-tab.is-active {
+    color: var(--brand-dark);
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  }
+  .list-tab-count {
+    display: inline-block;
+    min-width: 18px;
+    margin-left: 4px;
+    padding: 1px 5px;
+    color: inherit;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    background: rgba(15, 23, 42, 0.06);
+    border-radius: 999px;
+  }
+  .list-tab-hint { margin-left: 8px; color: var(--muted); font-size: 11px; }
+  .group-empty {
+    grid-column: 1 / -1;
+    padding: 26px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+  }
+
+  .card {
+    position: relative;
+    display: flex;
+    padding: 0;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    perspective: 1400px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+  .card:hover { border-color: #c7d2fe; box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+  /* 卡片可翻转：正面放状态和按钮，背面放页面入口/文档。
+     两面放在同一个 grid 单元格里，卡片高度取两面较高者，翻面时不会跳高度。 */
+  .card-flip {
+    position: relative;
+    flex: 1;
+    display: grid;
+    min-height: 200px;
+    transform-style: preserve-3d;
+    transition: transform 0.42s ease;
+  }
+  .card.flipped .card-flip { transform: rotateY(180deg); }
+  .card-face {
+    grid-area: 1 / 1;
+    padding: 18px;
+    background-color: var(--surface);
+    border-radius: var(--radius);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  .card-back {
+    /* 背面不参与高度计算：只有正面撑高，入口多时只让链接列表自己滚动，
+       否则 txlcsystem 这种入口很多的卡片会把整行拉高。 */
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    overflow: hidden;
+    transform: rotateY(180deg);
+  }
+  /* 入口多时链接列表出现滚动，显式画出细滚动条，避免看起来像被截断。 */
+  .back-links { overflow-y: auto; min-height: 0; padding-right: 2px; scrollbar-width: thin; }
+  .back-links::-webkit-scrollbar { width: 6px; }
+  .back-links::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.55);
+    border-radius: 999px;
+  }
+  .back-links::-webkit-scrollbar-track { background: transparent; }
+  .back-head, .back-label, .back-hint, .back-actions { flex: 0 0 auto; }
+  .back-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  .back-head-right { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
+  .back-head .back-title { display: flex; gap: 8px; align-items: center; min-width: 0; }
+  .back-head h2 {
+    margin: 0;
+    overflow: hidden;
+    font-size: 16px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .back-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+  .back-links { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; }
+  .back-links .entry-link {
+    justify-content: flex-start;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .back-links .entry-link::after { content: " ↗"; }
+  .back-links .entry-link.disabled::after { content: ""; }
+  .back-hint { color: var(--muted); font-size: 11px; line-height: 1.6; }
+  .back-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+  /* 运行中/进行中的左侧强调条画在卡片两面上，
+     翻到背面也保留；用背景渐变避免 ::before 的直角戳出圆角。 */
+  .card.is-running .card-face {
+    background-image: linear-gradient(180deg, #22c55e, #16a34a);
+    background-repeat: no-repeat;
+    background-size: 4px 100%;
+  }
+  .card.is-pending .card-face {
+    background-image: linear-gradient(180deg, #fbbf24, #f59e0b);
+    background-repeat: no-repeat;
+    background-size: 4px 100%;
+  }
+
+  .card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .service-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .status-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    background: #cbd5e1;
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
+  }
+  .status-dot.on { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.16); }
+  .status-dot.pending { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18); }
+  .service-name h2 {
+    margin: 0;
+    overflow: hidden;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .port {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    color: var(--muted);
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  /* 端口可点击修改：悬停时给一点提示，避免看着像纯文本。 */
+  .port-edit {
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .port-edit:hover {
+    color: var(--brand-dark);
+    background: var(--brand-soft);
+    border-color: #c7d2fe;
+  }
+  .entry-link.disabled {
+    color: var(--muted);
+    cursor: pointer;
+    background: #f1f5f9;
+    border-style: dashed;
+    text-decoration: none;
+  }
+
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .badge.running { color: var(--green); background: var(--green-bg); }
+  .badge.stopped { color: var(--muted); background: #eef2f7; }
+  .badge.watch { color: var(--brand-dark); background: var(--brand-soft); }
+  .badge.core { color: var(--violet); background: var(--violet-bg); }
+  .badge.failed { color: var(--red); background: var(--red-bg); }
+  .badge.pending { color: var(--amber); background: var(--amber-bg); }
+
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    vertical-align: -2px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 16px; }
+  .meta-chip {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    padding: 4px 8px;
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+  }
+  .meta-chip b { color: var(--text); font-weight: 600; }
+
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .btn {
+    appearance: none;
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  }
+  .btn:hover { background: var(--surface-soft); border-color: var(--line-strong); }
+  .btn.small { padding: 7px 10px; }
+  .btn.primary {
+    color: #fff;
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+    border-color: #2563eb;
+    box-shadow: 0 5px 12px rgba(37, 99, 235, 0.22);
+  }
+  .btn.primary:hover { background: linear-gradient(180deg, #2563eb, #1d4ed8); border-color: #1d4ed8; }
+  .btn.danger { color: var(--red); background: #fff5f5; border-color: #fecaca; }
+  .btn.danger:hover { background: var(--red-bg); }
+  .btn.soft { color: var(--text); background: var(--surface-soft); border-color: var(--line); }
+  .btn.soft:hover { background: #eef2f7; border-color: var(--line-strong); }
+  .btn.warn { color: var(--amber); background: #fffbeb; border-color: #fde68a; }
+  .btn.warn:hover { background: var(--amber-bg); }
+  .btn.ghost { background: transparent; }
+  .btn:disabled { cursor: not-allowed; opacity: 0.45; }
+
+  .tools {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+  }
+  .link-btn {
+    appearance: none;
+    padding: 4px 8px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    transition: color 0.12s ease, background 0.12s ease;
+  }
+  .link-btn:hover { color: var(--brand-dark); background: var(--brand-soft); }
+
+  .entries {
+    margin-top: 14px;
+    padding: 12px;
+    background: linear-gradient(180deg, var(--surface-soft), #f1f5f9);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .entries-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .entries-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .entries-count { color: var(--muted); font-size: 11px; }
+  .entries-list { display: flex; gap: 6px; flex-wrap: wrap; }
+  .entry-link {
+    display: inline-flex;
+    align-items: center;
+    height: 27px;
+    padding: 0 10px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+  }
+  .entry-link::after { margin-left: 5px; color: var(--muted); font-size: 10px; content: "↗"; }
+  .entry-link:hover { color: var(--brand-dark); background: var(--brand-soft); border-color: #bfdbfe; transform: translateY(-1px); }
+
+  .panel {
+    margin-top: 18px;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+  }
+  .panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 18px;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+  }
+  .panel-head strong { font-size: 13px; }
+  .log-head { align-items: flex-start; flex-wrap: wrap; }
+  .log-heading { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .log-mode-switch {
+    display: flex;
+    padding: 3px;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  .mode-btn {
+    appearance: none;
+    padding: 5px 11px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+  }
+  .mode-btn.is-active { color: var(--text); background: #fff; box-shadow: var(--shadow-sm); }
+  .log-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .log-tools label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .log-tabs-wrap {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 14px;
+    background: #fbfdff;
+    border-bottom: 1px solid var(--line);
+  }
+  .log-tabs-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .log-tabs {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .log-tabs::-webkit-scrollbar { display: none; }
+  .log-tab {
+    appearance: none;
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 2px;
+    align-items: center;
+    padding: 7px 11px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  }
+  .log-tab:hover { color: var(--text); background: var(--surface-soft); border-color: var(--line-strong); }
+  .log-tab.is-active {
+    color: var(--brand-dark);
+    background: var(--brand-soft);
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+  }
+  .log-tab.is-stopped { opacity: 0.55; border-style: dashed; }
+  .tab-scroll-btn {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .tab-scroll-btn:hover:not(:disabled) { color: var(--brand-dark); background: var(--brand-soft); border-color: #bfdbfe; }
+  .tab-scroll-btn:disabled { cursor: default; opacity: 0.3; }
+  .tab-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    vertical-align: 1px;
+    background: #cbd5e1;
+    border-radius: 50%;
+  }
+  .tab-dot.on { background: #22c55e; }
+  .log-source-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 8px 14px;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+  }
+  .source-tab {
+    appearance: none;
+    padding: 4px 9px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+  }
+  .source-tab.is-active { color: var(--brand-dark); background: var(--brand-soft); border-color: #bfdbfe; }
+  .log-summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 9px 16px;
+    color: var(--muted);
+    font-size: 12px;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+  }
+  .log-summary .bad { color: #b91c1c; font-weight: 700; }
+  .log-summary .warn { color: #b45309; font-weight: 700; }
+
+  .log-tools-inline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  .job-bar {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    background: #fbfdff;
+    border-bottom: 1px solid var(--line);
+  }
+  .job-select {
+    max-width: 380px;
+    padding: 6px 9px;
+    color: var(--text);
+    font-size: 12px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .job-meta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .job-error-summary {
+    flex: 0 0 auto;
+    max-height: 150px;
+    margin: 0;
+    padding: 10px 16px;
+    overflow: auto;
+    color: #fecaca;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #450a0a;
+    border-bottom: 1px solid #7f1d1d;
+  }
+  .job-error-summary strong { color: #fca5a5; }
+
+  .meta-chip.git { gap: 4px; }
+  .meta-chip.git .git-dirty { color: var(--amber); font-weight: 700; }
+  .meta-chip.git .git-ahead { color: var(--green); font-weight: 700; }
+  .meta-chip.git .git-behind { color: var(--red); font-weight: 700; }
+  .log-line { display: block; min-height: 1.55em; white-space: pre-wrap; }
+  .log-line.error { color: #fca5a5; font-weight: 600; }
+  .log-line.warn { color: #fcd34d; }
+  .log-line.stack { color: #fca5a5; opacity: 0.85; }
+  .log-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(4px);
+  }
+  .log-modal {
+    display: flex;
+    flex-direction: column;
+    width: min(1240px, 96vw);
+    height: min(88vh, 900px);
+    max-height: 88vh;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 18px;
+    box-shadow: 0 30px 80px rgba(15, 23, 42, 0.35);
+    animation: logIn 0.16s ease-out;
+  }
+  @keyframes logIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.99); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .log-modal .panel-head { flex: 0 0 auto; }
+  .log-modal .log-source-tabs,
+  .log-modal .log-summary { flex: 0 0 auto; }
+  .log-modal .log-output { flex: 1; min-height: 0; max-height: none; }
+
+  /* “代码”弹窗：git 分支/历史/改动 + 安装依赖，复用日志弹窗的遮罩。 */
+  .git-modal { width: min(1000px, 96vw); height: auto; max-height: 88vh; }
+  .git-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px 18px; }
+  .git-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .git-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .git-section { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+  .git-section h4 {
+    margin: 0;
+    padding: 9px 12px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    background: #f8fafc;
+    border-bottom: 1px solid var(--line);
+  }
+  .git-list { max-height: 320px; margin: 0; padding: 0; list-style: none; overflow: auto; }
+  .git-list li {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 7px 12px;
+    font-size: 12px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .git-list li:last-child { border-bottom: 0; }
+  .git-list li.clickable { cursor: pointer; }
+  .git-list li.clickable:hover { background: #f1f5f9; }
+  .git-list .git-author {
+    flex: 0 0 auto;
+    max-width: 110px;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 暂存记录右侧的恢复/删除按钮：恢复失败时最常见的做法就是删掉已应用的记录。 */
+  .git-list .stash-tools { display: flex; gap: 6px; margin-left: auto; }
+  .git-list .stash-item { flex-wrap: wrap; }
+  .git-list .stash-hint { flex: 1 1 100%; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .git-list .stash-badge {
+    flex: 0 0 auto;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 11px;
+  }
+  .git-list .stash-badge.ok { background: #dcfce7; color: #166534; }
+  /* 冲突面板：索引里有未合并路径时，逐块选择保留哪一侧，解决后再 git add。 */
+  .conflict-section { margin-bottom: 14px; border-color: #f3b4ae; background: #fff8f7; }
+  .conflict-section h4 { background: #fff1ef; color: #b42318; }
+  .conflict-section h4 .diff-hint { color: #b42318; font-weight: 400; margin-left: 8px; }
+  .conflict-file { border-top: 1px solid var(--line); padding: 10px 12px; }
+  .conflict-file:first-child { border-top: 0; }
+  .conflict-file-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .conflict-file-head .git-path { flex: 1 1 220px; font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  .conflict-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  .conflict-hunk {
+    margin-top: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .conflict-hunk-head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    background: #f8fafc;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .conflict-hunk-head .conflict-pick { margin-left: auto; }
+  .conflict-cols { display: grid; grid-template-columns: 1fr 1fr; }
+  .conflict-col { min-width: 0; }
+  .conflict-col + .conflict-col { border-left: 1px solid var(--line); }
+  .conflict-col-head {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .conflict-col-head .conflict-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conflict-col pre {
+    margin: 0;
+    padding: 6px 10px;
+    max-height: 170px;
+    overflow: auto;
+    color: #111827;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre;
+  }
+  .conflict-col.ours pre { background: rgba(46, 160, 67, 0.08); }
+  .conflict-col.theirs pre { background: rgba(56, 139, 253, 0.08); }
+  .conflict-col.picked { box-shadow: inset 0 0 0 2px #60a5fa; }
+  .conflict-col.picked .conflict-col-head { background: #eff6ff; color: #1d4ed8; }
+  .conflict-foot {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 8px 12px 2px;
+  }
+  .conflict-foot .diff-hint { margin-right: auto; }
+
+  .commit-modal { width: min(1180px, 96vw); height: auto; max-height: 90vh; }
+  .commit-modal .git-body { max-height: none; }
+  .commit-bar { gap: 12px; margin: 0 0 12px; }
+  .commit-bar .git-bar-spacer { flex: 1; }
+  .diff-toggle {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .diff-hint { color: var(--muted); font-size: 12px; }
+  .commit-files-section { margin-bottom: 14px; }
+  .commit-files-section .git-list { max-height: 148px; }
+  .commit-files-section .git-list li { cursor: pointer; }
+  .commit-files-section .git-list li:hover { background: #f1f5f9; }
+  .diff-stat { flex: 0 0 auto; font-family: "SF Mono", Menlo, monospace; font-size: 11px; }
+  .diff-stat .add { color: var(--green); }
+  .diff-stat .del { color: var(--red); }
+
+  /* 按文件分块的 diff：每个文件独立表头，行号 + 底色，长行横向滚动不折行。 */
+  .commit-diffs { max-height: 48vh; overflow: auto; padding: 0; background: #0d1117; }
+  .diff-file + .diff-file { border-top: 1px solid #21262d; }
+  .diff-file.flash { box-shadow: inset 3px 0 0 #60a5fa; }
+  .diff-file-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 7px 12px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+  }
+  .diff-file-head .diff-status {
+    flex: 0 0 auto;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #d29922;
+    background: rgba(210, 153, 34, 0.16);
+    border-radius: 999px;
+  }
+  .diff-file-head .diff-status.add { color: #3fb950; background: rgba(63, 185, 80, 0.16); }
+  .diff-file-head .diff-status.del { color: #f85149; background: rgba(248, 81, 73, 0.16); }
+  .diff-file-head .diff-status.new { color: #58a6ff; background: rgba(88, 166, 255, 0.16); }
+  .diff-path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #e6edf3;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .diff-file-head .diff-stat { color: #8b949e; }
+  .diff-file-head .diff-stat .add { color: #3fb950; }
+  .diff-file-head .diff-stat .del { color: #f85149; }
+  .diff-file-head .diff-vscode {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    color: #8b949e;
+    font-size: 11px;
+    background: transparent;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .diff-file-head .diff-vscode:hover { color: #e6edf3; border-color: #8b949e; }
+  .diff-body {
+    overflow-x: auto;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .diff-row { display: flex; width: max-content; min-width: 100%; }
+  .diff-row .ln {
+    flex: 0 0 auto;
+    width: 52px;
+    padding: 0 8px;
+    color: #6e7681;
+    text-align: right;
+    user-select: none;
+  }
+  .diff-row .ln.new { border-right: 1px solid #21262d; }
+  .diff-row .dtext { flex: 1; padding: 0 14px 0 8px; color: #c9d1d9; white-space: pre; }
+  .diff-row.add { background: rgba(46, 160, 67, 0.15); }
+  .diff-row.add .dtext { color: #b7f7c3; }
+  .diff-row.del { background: rgba(248, 81, 73, 0.14); }
+  .diff-row.del .dtext { color: #ffd9d6; }
+  .diff-row.hunk { background: #161b22; }
+  .diff-row.hunk .dtext { color: #79c0ff; }
+  .diff-row.meta .dtext { color: #8b949e; font-style: italic; }
+  .diff-empty { padding: 14px; color: #8b949e; font-size: 12px; }
+  .git-list .git-code {
+    flex: 0 0 auto;
+    width: 30px;
+    color: var(--amber);
+    font-family: "SF Mono", Menlo, monospace;
+    font-weight: 700;
+    text-align: center;
+  }
+  .git-list .git-code.add { color: var(--green); }
+  .git-list .git-code.del { color: var(--red); }
+  .git-list .git-code.new { color: #2563eb; }
+  .git-list .git-path,
+  .git-list .git-subject {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .git-list .git-path { font-family: "SF Mono", Menlo, monospace; }
+  .git-list .git-hash {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-family: "SF Mono", Menlo, monospace;
+  }
+  .git-list .git-when { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+  .git-list .git-branch-tag {
+    flex: 0 0 auto;
+    max-width: 160px;
+    padding: 1px 6px;
+    overflow: hidden;
+    color: #1d4ed8;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: #eff6ff;
+    border-radius: 999px;
+  }
+  .git-ref-label {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .git-ref-label select {
+    max-width: 320px;
+    padding: 5px 8px;
+    color: var(--text);
+    font-size: 12px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .git-more { margin: 8px 12px 10px; }
+
+  /* 添加项目弹窗 */
+  .add-modal { width: min(780px, 96vw); height: auto; max-height: 90vh; }
+  .port-modal { width: min(460px, 94vw); height: auto; }
+  .settings-advanced {
+    margin: 4px 0 12px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .settings-advanced summary {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .settings-advanced[open] summary { margin-bottom: 10px; }
+  .settings-note { margin: 0 0 12px; line-height: 1.7; }
+  .add-type { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .add-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .add-row > span:first-child {
+    flex: 0 0 78px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .add-row input[type="text"],
+  .add-row input[type="number"],
+  .add-row select {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 9px;
+    color: var(--text);
+    font-size: 12px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .add-row input[type="checkbox"] { width: 16px; height: 16px; }
+  .add-detect {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.7;
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .add-detect .warn { color: #b45309; }
+  .add-preview {
+    margin: 6px 0 12px;
+    padding: 10px 12px;
+    overflow: auto;
+    color: #e2e8f0;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: #0f172a;
+    border-radius: 10px;
+  }
+  .add-foot {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 12px 18px;
+    background: #f8fafc;
+    border-top: 1px solid var(--line);
+  }
+  .add-foot .diff-hint { margin-right: auto; }
+  .badge.frontend { color: #6d28d9; background: #f5f3ff; }
+  .git-empty { padding: 14px; color: var(--muted); font-size: 12px; }
+  .git-status {
+    margin: 0 0 12px;
+    padding: 9px 12px;
+    color: var(--text);
+    font-size: 12px;
+    background: #f1f5f9;
+    border-radius: 9px;
+  }
+  .git-status.bad { background: #fef2f2; color: #b91c1c; }
+  .git-status.ok { background: #ecfdf5; color: #047857; }
+  .git-work {
+    max-height: 180px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    overflow: auto;
+    color: #e2e8f0;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #0f172a;
+    border-radius: 10px;
+  }
+  @media (max-width: 760px) {
+    .git-grid { grid-template-columns: 1fr; }
+  }
+
+  .console {
+    max-height: 360px;
+    padding: 15px 18px;
+    margin: 0;
+    overflow: auto;
+    color: var(--console-text);
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--console);
+  }
+
+  .hidden { display: none !important; }
+
+  .toast {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 20;
+    max-width: 420px;
+    padding: 12px 16px;
+    color: #fff;
+    font-size: 13px;
+    pointer-events: none;
+    background: #0f172a;
+    border-radius: 11px;
+    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.24);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: #991b1b; }
+
+  .bye {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    color: var(--muted);
+    font-size: 16px;
+  }
+
+  /* ---------- 健康检查：卡片状态点与异常徽标 ---------- */
+  .status-dot.warn { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18); }
+  .status-dot.bad { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2); animation: pulse-bad 1.6s ease-in-out infinite; }
+  @keyframes pulse-bad {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2); }
+    50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.12); }
+  }
+  .badge.health-bad { color: var(--red); background: var(--red-bg); }
+  .badge.health-warn { color: var(--amber); background: var(--amber-bg); }
+  .badge.health-ok { color: var(--green); background: var(--green-bg); }
+  .card.is-down .card-face {
+    background-image: linear-gradient(180deg, #ef4444, #b91c1c);
+    background-repeat: no-repeat;
+    background-size: 4px 100%;
+  }
+
+  /* ---------- 端口面板 ---------- */
+  .ports-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ports-table th {
+    padding: 8px 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+  }
+  .ports-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .ports-table tr.is-managed td { background: var(--brand-soft); }
+  .ports-table .mono { font-family: "SF Mono", Menlo, Monaco, Consolas, monospace; }
+  .ports-table .port-tag {
+    display: inline-block;
+    min-width: 56px;
+    padding: 2px 6px;
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .ports-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .ports-hint { color: var(--muted); font-size: 12px; }
+  .ports-empty { padding: 16px; color: var(--muted); text-align: center; }
+
+  /* ---------- 日志过滤：关键字 + 级别 + 导出 ---------- */
+  .log-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--surface-soft);
+    border-bottom: 1px solid var(--line);
+  }
+  .log-filter input[type="text"] {
+    flex: 1 1 180px;
+    min-width: 140px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+  }
+  .log-filter select {
+    padding: 5px 8px;
+    font-size: 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+  }
+  .log-line mark { padding: 0 1px; color: #111827; background: #fde68a; border-radius: 2px; }
+  .log-line.level-hidden { display: none; }
+
+  /* ---------- 设置弹窗里的健康检查分组 ---------- */
+  .settings-section { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+  .settings-section h4 { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+
+  @media (max-width: 720px) {
+    header { padding: 20px 18px; }
+    main { padding: 16px 18px 32px; }
+    .summary { gap: 18px; }
+    .grid { grid-template-columns: 1fr; }
+    .log-overlay { padding: 10px; }
+    .log-modal { max-height: 92vh; border-radius: 14px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="brand-mark">TX</div>
+    <div>
+      <h1>服务控制台</h1>
+      <p class="subtitle">本地 TXLC 服务启动、更新、热更新与日志</p>
+    </div>
+  </div>
+  <div class="global-actions">
+    <button class="btn primary" onclick="openAddProject()">添加项目</button>
+    <button id="btn-start-core" class="btn primary" onclick="runFastAction('start','core')">启动核心项目</button>
+    <button id="btn-update-all" class="btn" onclick="runAction('update','all')">更新全部</button>
+    <button id="btn-stop-all" class="btn danger" onclick="runFastAction('stop','all')">停止全部</button>
+    <button class="btn ghost" onclick="openPorts()">端口</button>
+    <button class="btn ghost" onclick="loadStatus(true)">刷新</button>
+    <button id="btn-reload" class="btn warn hidden" onclick="location.reload()" title="控制台文件已更新，刷新后使用新版本">控制台已更新，点击刷新</button>
+    <button class="btn ghost" onclick="shutdownPanel()">关闭控制台</button>
+  </div>
+</header>
+
+<main>
+  <section class="summary">
+    <div class="summary-item">
+      <span class="summary-label">运行中</span>
+      <strong class="summary-value" id="running-count">0</strong>
+      <span class="summary-total">/ <span id="total-count">0</span></span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-label">探活异常</span>
+      <strong class="summary-value" id="unhealthy-count">0</strong>
+      <span class="summary-muted" id="unhealthy-hint">全部正常</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-label">当前任务</span>
+      <span class="summary-text" id="active-job-text">空闲</span>
+      <button id="btn-job-view" class="link-btn hidden" onclick="openActiveJobLog()">查看更新日志</button>
+    </div>
+    <div class="summary-item">
+      <span class="summary-label">状态刷新</span>
+      <span class="summary-muted" id="last-refresh"></span>
+    </div>
+  </section>
+
+  <!-- 后端服务 / 前端项目用 tab 切换，避免两类项目混在一起。 -->
+  <div class="list-tabs" role="tablist" aria-label="项目类型">
+    <button id="tab-backend" class="list-tab is-active" role="tab" aria-selected="true" onclick="setListTab('backend')">
+      后端服务 <span id="tab-backend-count" class="list-tab-count">0</span>
+    </button>
+    <button id="tab-frontend" class="list-tab" role="tab" aria-selected="false" onclick="setListTab('frontend')">
+      前端项目 <span id="tab-frontend-count" class="list-tab-count">0</span>
+    </button>
+    <span class="list-tab-hint">点卡片上的“页面入口 / 文档”可翻到背面</span>
+  </div>
+
+  <section id="projects" class="grid"></section>
+
+  <div id="log-panel" class="log-overlay hidden" onclick="if (event.target === this) hideLog()">
+    <div class="log-modal" role="dialog" aria-modal="true" aria-labelledby="log-title">
+      <div class="panel-head log-head">
+        <div class="log-heading">
+          <strong id="log-title">日志</strong>
+          <div class="log-mode-switch">
+            <button id="log-mode-service" class="mode-btn is-active" onclick="setLogKind('service')">服务日志</button>
+            <button id="log-mode-action" class="mode-btn" onclick="setLogKind('action')">操作日志</button>
+            <button id="log-mode-job" class="mode-btn" onclick="setLogKind('job')">更新日志</button>
+          </div>
+        </div>
+        <div class="log-tools">
+          <div id="log-service-tools" class="log-tools-inline">
+            <label><input type="checkbox" id="log-errors-only" onchange="applyLogFilter()"> 只看报错</label>
+            <label><input type="checkbox" id="log-auto" checked> 自动刷新</label>
+            <button class="btn ghost small" onclick="refreshLog(true)">刷新</button>
+          </div>
+          <div id="log-job-tools" class="log-tools-inline hidden">
+            <span class="summary-muted">更新/构建输出</span>
+            <button class="btn ghost small" onclick="refreshJobView(true)">刷新</button>
+          </div>
+          <button class="btn ghost small" onclick="hideLog()">关闭</button>
+        </div>
+      </div>
+      <div id="log-projects-bar" class="log-tabs-wrap">
+        <button class="tab-scroll-btn" aria-label="向左切换项目" onclick="scrollLogTabs(-1)">‹</button>
+        <span class="log-tabs-label">项目</span>
+        <div id="log-tabs" class="log-tabs"></div>
+        <button class="tab-scroll-btn" aria-label="向右切换项目" onclick="scrollLogTabs(1)">›</button>
+      </div>
+      <div id="log-job-bar" class="job-bar hidden">
+        <select id="job-history" class="job-select" onchange="selectHistoryJob(this.value)"></select>
+        <span id="job-badge" class="badge"></span>
+        <span id="job-meta" class="job-meta"></span>
+        <button id="job-stop" class="btn danger small hidden" onclick="stopCurrentJob()">停止任务</button>
+      </div>
+      <pre id="job-error-summary" class="job-error-summary hidden"></pre>
+      <div id="log-source-tabs" class="log-source-tabs"></div>
+      <div id="log-filter" class="log-filter">
+        <input id="log-keyword" type="text" placeholder="关键字过滤（支持多个，空格分隔）" oninput="applyLogFilter()">
+        <select id="log-level" onchange="applyLogFilter()">
+          <option value="all">全部级别</option>
+          <option value="error">只看 ERROR</option>
+          <option value="warn">ERROR + WARN</option>
+        </select>
+        <button class="btn ghost small" onclick="exportLog()">导出当前视图</button>
+        <span id="log-filter-info" class="ports-hint"></span>
+      </div>
+      <div id="log-summary" class="log-summary"></div>
+      <pre id="log-output" class="console log-output"></pre>
+    </div>
+  </div>
+
+  <!-- “代码”弹窗：分支、改动、提交历史，以及拉取/暂存/安装依赖。 -->
+  <div id="git-panel" class="log-overlay hidden" onclick="if (event.target === this) hideGit()">
+    <div class="log-modal git-modal" role="dialog" aria-modal="true" aria-labelledby="git-title">
+      <div class="panel-head log-head">
+        <div class="log-heading">
+          <strong id="git-title">代码</strong>
+          <span id="git-branch" class="meta-chip">-</span>
+        </div>
+        <div class="log-tools">
+          <button class="btn ghost small" onclick="loadGit(true)">刷新</button>
+          <button class="btn ghost small" onclick="hideGit()">关闭</button>
+        </div>
+      </div>
+      <div class="git-body">
+        <div id="git-status" class="git-status">正在读取 git 状态…</div>
+        <!-- 未合并路径会让暂存/拉取直接失败，所以把冲突解决放在最显眼的位置。 -->
+        <div id="git-conflict-wrap" class="git-section conflict-section hidden">
+          <h4>
+            冲突（<span id="git-conflict-count">0</span>）
+            <span class="diff-hint">先解决冲突并标记，暂存/拉取才能继续</span>
+          </h4>
+          <div id="git-conflicts"></div>
+        </div>
+        <div id="git-ref-bar" class="git-bar">
+          <label class="git-ref-label">查看历史
+            <select id="git-ref" onchange="changeGitRef(this.value)"></select>
+          </label>
+          <span id="git-ref-note" class="diff-hint"></span>
+        </div>
+        <div id="git-actions" class="git-bar"></div>
+        <pre id="git-work" class="git-work hidden"></pre>
+        <div class="git-grid">
+          <div class="git-section">
+            <h4 id="git-files-title">改动文件</h4>
+            <ul id="git-files" class="git-list"></ul>
+          </div>
+          <div class="git-section">
+            <h4>提交历史</h4>
+            <ul id="git-commits" class="git-list"></ul>
+            <button id="git-more" class="btn soft small git-more hidden" onclick="loadMoreCommits()">加载更多</button>
+          </div>
+        </div>
+        <div id="git-stash-wrap" class="git-section hidden" style="margin-top:14px">
+          <h4>暂存记录</h4>
+          <ul id="git-stashes" class="git-list"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提交明细弹窗：谁提交、什么时候、改了哪些文件、具体 diff。 -->
+  <div id="commit-panel" class="log-overlay hidden" onclick="if (event.target === this) hideCommit()">
+    <div class="log-modal commit-modal" role="dialog" aria-modal="true" aria-labelledby="commit-title">
+      <div class="panel-head log-head">
+        <div class="log-heading">
+          <strong id="commit-title">提交明细</strong>
+          <span id="commit-hash" class="meta-chip">-</span>
+        </div>
+        <div class="log-tools">
+          <button class="btn ghost small" onclick="hideCommit()">关闭</button>
+        </div>
+      </div>
+      <div class="git-body">
+        <div id="commit-meta" class="git-status">正在读取提交信息…</div>
+        <div id="commit-message" class="git-status hidden" style="white-space:pre-wrap"></div>
+        <div class="git-bar commit-bar">
+          <label class="diff-toggle">
+            <input type="checkbox" id="commit-only-changed" onchange="renderCommitBody()">
+            只看改动行
+          </label>
+          <span id="commit-hint" class="diff-hint"></span>
+          <span class="git-bar-spacer"></span>
+          <button class="btn ghost small" onclick="copyCommitCommand()">复制 git show 命令</button>
+        </div>
+        <div class="git-section commit-files-section">
+          <h4 id="commit-files-title">改动文件</h4>
+          <ul id="commit-files" class="git-list"></ul>
+        </div>
+        <div class="git-section">
+          <h4>具体改动</h4>
+          <div id="commit-diffs" class="commit-diffs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加项目弹窗：支持后端 Maven 服务和前端 Node 项目。 -->
+  <div id="add-panel" class="log-overlay hidden" onclick="if (event.target === this) hideAddProject()">
+    <div class="log-modal add-modal" role="dialog" aria-modal="true" aria-labelledby="add-title">
+      <div class="panel-head log-head">
+        <div class="log-heading">
+          <strong id="add-title">添加项目</strong>
+          <span class="meta-chip">写入 projects.conf</span>
+        </div>
+        <div class="log-tools">
+          <button class="btn ghost small" onclick="hideAddProject()">关闭</button>
+        </div>
+      </div>
+      <div class="git-body">
+        <div class="add-type">
+          <button id="add-type-backend" class="btn primary small" onclick="setAddType('backend')">后端 Java 服务</button>
+          <button id="add-type-frontend" class="btn soft small" onclick="setAddType('frontend')">前端 Node 项目</button>
+          <span id="add-type-hint" class="diff-hint"></span>
+        </div>
+
+        <div class="add-row">
+          <span>项目目录</span>
+          <input id="add-dir" type="text" placeholder="/Users/you/project" oninput="updateAddPreview()">
+          <button class="btn soft small" onclick="pickProjectDir()">浏览…</button>
+          <button class="btn ghost small" onclick="inspectProjectDir()">检测</button>
+        </div>
+
+        <div id="add-detect" class="add-detect">先选择目录，然后点“检测”。</div>
+
+        <div class="add-row">
+          <span>项目名</span>
+          <input id="add-name" type="text" placeholder="例如 web-antd" oninput="updateAddPreview()">
+        </div>
+        <div class="add-row">
+          <span>端口</span>
+          <input id="add-port" type="number" min="1" max="65535" placeholder="8080" oninput="updateAddPreview()">
+        </div>
+        <div class="add-row">
+          <span>核心项目</span>
+          <input id="add-core" type="checkbox">
+          <span class="diff-hint">核心项目会在“启动核心项目”时一起启动</span>
+        </div>
+        <div class="add-row">
+          <span>文档地址</span>
+          <input id="add-doc" type="text" placeholder="留空自动生成">
+        </div>
+
+        <div id="add-frontend-fields" class="hidden">
+          <div class="add-row">
+            <span>包管理器</span>
+            <select id="add-pm" onchange="updateAddPreview()">
+              <option value="npm">npm</option>
+              <option value="pnpm">pnpm</option>
+              <option value="yarn">yarn</option>
+              <option value="bun">bun</option>
+            </select>
+          </div>
+          <div class="add-row">
+            <span>启动脚本</span>
+            <select id="add-dev-script" onchange="updateAddPreview()"></select>
+          </div>
+          <div class="add-row">
+            <span>构建脚本</span>
+            <select id="add-build-script" onchange="updateAddPreview()"></select>
+          </div>
+        </div>
+
+        <div id="add-preview" class="add-preview"></div>
+        <div id="add-error" class="git-status bad hidden"></div>
+      </div>
+      <div class="add-foot">
+        <span id="add-foot-hint" class="diff-hint">目录检测通过后才能添加</span>
+        <button class="btn ghost" onclick="hideAddProject()">取消</button>
+        <button id="add-submit" class="btn primary" onclick="submitAddProject()">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 修改端口弹窗：写 ports.conf，运行中的项目提示重启后生效。 -->
+  <div id="port-panel" class="log-overlay hidden" onclick="if (event.target === this) hidePortModal()">
+    <div class="log-modal port-modal" role="dialog" aria-modal="true" aria-labelledby="port-title">
+      <div class="panel-head log-head">
+        <div class="log-heading">
+          <strong id="port-title">修改端口</strong>
+          <span id="port-current" class="meta-chip">当前 -</span>
+        </div>
+        <div class="log-tools">
+          <button class="btn ghost small" onclick="hidePortModal()">关闭</button>
+        </div>
+      </div>
+      <div class="git-body">
+        <div class="add-row">
+          <span>新端口</span>
+          <input id="port-input" type="number" min="1" max="65535" placeholder="8080" oninput="clearPortError()">
+        </div>
+        <div id="port-hint" class="diff-hint"></div>
+        <div id="port-error" class="git-status bad hidden"></div>
+      </div>
+      <div class="add-foot">
+        <span class="diff-hint">端口写入 ports.conf，不修改业务代码</span>
+        <button class="btn ghost" onclick="hidePortModal()">取消</button>
+        <button id="port-submit" class="btn primary" onclick="submitPort()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 项目设置弹窗：添加之后仍可改名称、目录、类型、端口、文档和脚本。 -->
+  <div id="settings-panel" class="log-overlay hidden" onclick="if (event.target === this) hideSettings()">
+    <div class="log-modal add-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="panel-head log-head">
+        <div class="log-heading">
+          <strong id="settings-title">项目设置</strong>
+          <span class="meta-chip">写入 projects.conf</span>
+        </div>
+        <div class="log-tools">
+          <button class="btn ghost small" onclick="hideSettings()">关闭</button>
+        </div>
+      </div>
+      <div class="git-body">
+        <div class="add-row">
+          <span>项目名</span>
+          <input id="settings-name" type="text" placeholder="项目名">
+        </div>
+        <div class="add-row">
+          <span>项目目录</span>
+          <input id="settings-dir" type="text" placeholder="/Users/you/project">
+        </div>
+        <div class="add-row">
+          <span>项目类型</span>
+          <select id="settings-type" onchange="refreshSettingsDetect()">
+            <option value="backend">后端 Java 服务</option>
+            <option value="frontend">前端 Node 项目</option>
+          </select>
+          <span id="settings-detect" class="diff-hint"></span>
+        </div>
+        <div class="add-row">
+          <span>端口</span>
+          <input id="settings-port" type="number" min="1" max="65535" placeholder="8080">
+        </div>
+        <div class="add-row">
+          <span>核心项目</span>
+          <input id="settings-core" type="checkbox">
+          <span class="diff-hint">核心项目会在“启动核心项目”时一起启动</span>
+        </div>
+        <div class="add-row">
+          <span>文档地址</span>
+          <input id="settings-doc" type="text" placeholder="留空自动生成">
+        </div>
+
+        <div id="settings-backend-fields">
+          <div class="add-row">
+            <span>install 模块</span>
+            <input id="settings-install" type="text" placeholder="多个用逗号分隔，留空自动扫描 *-api">
+          </div>
+        </div>
+
+        <div id="settings-frontend-fields" class="hidden">
+          <div class="add-row">
+            <span>包管理器</span>
+            <select id="settings-pm">
+              <option value="npm">npm</option>
+              <option value="pnpm">pnpm</option>
+              <option value="yarn">yarn</option>
+              <option value="bun">bun</option>
+            </select>
+          </div>
+          <div class="add-row">
+            <span>启动脚本</span>
+            <select id="settings-dev-script"></select>
+          </div>
+          <div class="add-row">
+            <span>构建脚本</span>
+            <select id="settings-build-script"></select>
+          </div>
+        </div>
+
+        <details class="settings-advanced">
+          <summary>高级：自定义启动/停止/构建脚本</summary>
+          <div class="add-row">
+            <span>启动脚本</span>
+            <input id="settings-start" type="text" placeholder="留空使用 java -jar 或前端生成脚本">
+          </div>
+          <div class="add-row">
+            <span>停止脚本</span>
+            <input id="settings-stop" type="text" placeholder="留空按 pid/端口停止">
+          </div>
+          <div class="add-row">
+            <span>构建脚本</span>
+            <input id="settings-build" type="text" placeholder="留空使用 mvn package 或前端 build 脚本">
+          </div>
+        </details>
+
+        <div class="diff-hint settings-note">
+          端口写入 ports.conf；如果项目代码里写死了端口（如 server.port、vite.config），控制台改端口可能不生效，以项目配置为准。
+        </div>
+
+        <!-- 健康检查：探活失败会自动重启，配置写入 health.conf -->
+        <div class="settings-section">
+          <h4>健康检查与自动重启</h4>
+          <div class="add-row">
+            <span>探活方式</span>
+            <select id="settings-health-mode">
+              <option value="tcp">TCP 端口探活</option>
+              <option value="http">HTTP 请求探活</option>
+              <option value="off">关闭探活</option>
+            </select>
+            <span class="diff-hint">TCP 用端口判断；HTTP 可填完整地址</span>
+          </div>
+          <div class="add-row">
+            <span>探活目标</span>
+            <input id="settings-health-target" type="text" placeholder="留空使用项目端口，例如 8080 或 http://localhost:8080/actuator/health">
+          </div>
+          <div class="add-row">
+            <span>检查间隔 / 超时</span>
+            <input id="settings-health-interval" type="number" min="2" max="600" placeholder="10">
+            <span class="diff-hint">秒</span>
+            <input id="settings-health-timeout" type="number" min="1" max="60" placeholder="2">
+            <span class="diff-hint">秒</span>
+          </div>
+          <div class="add-row">
+            <span>连续失败次数</span>
+            <input id="settings-health-failures" type="number" min="1" max="20" placeholder="3">
+            <span class="diff-hint">达到后判定为异常</span>
+          </div>
+          <div class="add-row">
+            <span>自动重启</span>
+            <input id="settings-health-restart" type="checkbox" checked>
+            <span class="diff-hint">重启上限</span>
+            <input id="settings-health-max" type="number" min="0" max="50" placeholder="5">
+            <span class="diff-hint">次</span>
+          </div>
+          <div class="add-row">
+            <button class="btn soft small" onclick="saveHealthSettings()">保存健康检查配置</button>
+            <span id="settings-health-info" class="diff-hint"></span>
+          </div>
+        </div>
+
+        <div id="settings-error" class="git-status bad hidden"></div>
+      </div>
+      <div class="add-foot">
+        <span id="settings-foot-hint" class="diff-hint">改名/换目录/换类型前请先停止项目</span>
+        <button class="btn ghost" onclick="hideSettings()">取消</button>
+        <button id="settings-submit" class="btn primary" onclick="submitSettings()">保存设置</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- 端口面板：看到底谁占了端口，并支持一键释放。 -->
+<div id="ports-panel" class="log-overlay hidden" onclick="if (event.target === this) hidePorts()">
+  <div class="log-modal" role="dialog" aria-modal="true" aria-labelledby="ports-title">
+    <div class="panel-head log-head">
+      <div class="log-heading">
+        <strong id="ports-title">端口面板</strong>
+        <span id="ports-count" class="meta-chip">0 个监听</span>
+      </div>
+      <div class="log-tools">
+        <label class="log-tools-inline"><input type="checkbox" id="ports-only-managed" onchange="loadPorts()"> 只看登记项目</label>
+        <button class="btn ghost small" onclick="loadPorts()">刷新</button>
+        <button class="btn ghost small" onclick="hidePorts()">关闭</button>
+      </div>
+    </div>
+    <div class="git-body">
+      <div class="ports-toolbar">
+        <input id="ports-search" type="text" placeholder="按端口 / 进程 / 项目过滤" oninput="renderPorts(state.portsData)" style="flex:1 1 200px;padding:6px 9px;font-size:12px;border:1px solid var(--line-strong);border-radius:8px">
+        <span class="ports-hint">“释放”会先发终止信号，1.5 秒内没退出才强制结束；只允许操作当前真实在监听的端口。</span>
+      </div>
+      <div id="ports-body"><div class="ports-empty">正在读取端口…</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const state = {
+  projects: [],
+  activeJob: null,
+  activeJobId: null, // 正在轮询的更新任务
+  viewJobId: null, // 弹框里正在查看的任务（可以是历史任务）
+  jobHistory: [], // 最近 20 个更新任务
+  jobTimer: null,
+  logProject: null,
+  logSource: null,
+  logTimer: null,
+  busy: false,
+  statusLoading: false,
+  pending: {}, // 项目名 -> 正在执行的动作，用于按钮/卡片的即时反馈
+  pendingSince: {}, // 项目名 -> 开始时间，避免刚提交就被状态轮询误判为结束
+  fastTimer: null,
+  logKind: "service", // service | action | job
+  gitProject: null, // “代码”弹窗当前项目
+  gitRef: "", // 当前查看的分支/引用：空=当前分支，__all__=全部分支
+  gitLimit: 20, // 当前已请求的提交条数，“加载更多”时递增
+  conflictPicks: {}, // 冲突逐块选择：{文件路径: {冲突序号: ours|theirs|both}}
+  stashRestored: {}, // 本次弹窗里刚恢复成功的暂存：{stash@{n}: true}，用于把按钮换成“删除”
+  gitStashes: [], // 当前项目最近 5 条暂存，供顶栏“恢复暂存”挑最近一条
+  commitHash: null, // 提交明细弹窗当前提交
+  commitData: null, // 当前提交的明细数据，切换“只看改动行”时复用
+  serverVersion: null, // 控制台文件版本；变化时只提示刷新，不强制重载以免关掉弹窗
+  lastRenderSignature: null, // 状态没变时不重建卡片，避免按钮闪烁
+  watchOverride: {}, // 热更新操作成功后短暂覆盖状态缓存，避免按钮闪回
+  portOverride: {}, // 端口保存后短暂覆盖状态缓存，避免旧轮询结果把端口翻回去
+  listTab: "backend", // 当前页签：backend | frontend
+  listTabChosen: false, // 用户是否手动切过页签；首次加载用来自动选有项目的一类
+  flipped: {}, // 卡片是否翻到背面：项目名 -> true
+  localHost: "localhost", // 打开本地页面用的主机名（后端下发，默认 localhost）
+  addType: "backend", // 添加项目弹窗当前类型：backend | frontend
+  addData: null, // 最近一次目录检测结果，提交时只作参考，后端会重新检测
+  portProject: null, // “修改端口”弹窗当前项目
+  settingsProject: null, // “项目设置”弹窗当前项目
+  settingsData: null, // 项目设置里最近一次目录检测结果
+  logContent: "", // 最近一次拉到的日志原文，关键字/级别过滤在本地重排，不用再请求
+  logLabel: "", // 当前日志来源的展示名（日志弹窗标题栏用）
+  logFiltered: [], // 过滤后的行，导出时直接用
+  logKeyword: "", // 日志关键字过滤（空格分隔多个）
+  logLevel: "all", // 日志级别过滤：all | error | warn
+  portsData: null, // 端口面板数据
+  portsTimer: null, // 端口面板打开时的自动刷新定时器
+};
+
+const $ = (id) => document.getElementById(id);
+
+// 是否是本机地址。后端会把入口/文档统一成 state.localHost（默认 localhost），
+// 这里同时兼容历史配置里写死的 127.0.0.1。
+function isLocalHost(host) {
+  const value = String(host || "").toLowerCase();
+  return value === "127.0.0.1"
+    || value === "localhost"
+    || value === "0.0.0.0"
+    || value === String(state.localHost || "").toLowerCase();
+}
+
+// 把本机地址的端口换成新端口，保留路径；外部地址原样返回。
+// 用于改端口后的本地即时展示，避免文档里写的旧端口让入口点错。
+function swapLocalPort(url, port) {
+  const text = String(url || "").trim();
+  // 只拆协议、主机、端口、路径四段，避免用 URL 解析把相对路径也当成地址。
+  const match = text.match(/^(https?:\/\/)([^/:]+)(?::\d+)?(.*)$/);
+  if (!match || !isLocalHost(match[2])) return text;
+  return `${match[1]}${match[2]}:${port}${match[3] || "/"}`;
+}
+
+// 项目名来自 projects.conf，插入 HTML 前先转义，避免特殊字符破坏页面。
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[ch]);
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, options);
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* 非 JSON 响应 */ }
+  if (!res.ok) {
+    const err = new Error(data.error || data.message || `HTTP ${res.status}`);
+    err.data = data; // 保留后端附加的 hint 等字段，便于给出下一步建议
+    throw err;
+  }
+  return data;
+}
+
+function labelAction(action) {
+  return ({
+    start: "启动", stop: "停止", restart: "重启", update: "更新",
+    watch: "热更新", unwatch: "停止热更新",
+    install: "安装依赖", gitpull: "拉取", gitfetch: "获取远端",
+    gitstash: "暂存", gitunstash: "恢复暂存"
+  })[action] || action;
+}
+
+function pendingLabel(action) {
+  return ({
+    start: "启动中", stop: "停止中", restart: "重启中", update: "更新中",
+    watch: "热更新开启中", unwatch: "热更新关闭中",
+    install: "安装中", gitpull: "拉取中", gitfetch: "获取远端中",
+    gitstash: "暂存中", gitunstash: "恢复中",
+  })[action] || "处理中";
+}
+
+function targetNames(target) {
+  if (target === "all") return state.projects.map((p) => p.name);
+  if (target === "core") return state.projects.filter((p) => p.core).map((p) => p.name);
+  return [target];
+}
+
+// 根据动作和目标算出需要显示 loading 的项目。
+function pendingNames(action, target) {
+  let names = targetNames(target);
+  const running = new Set(state.projects.filter((p) => p.running).map((p) => p.name));
+  if (action === "start") names = names.filter((n) => !running.has(n));
+  if (action === "stop") names = names.filter((n) => running.has(n));
+  // 已经在执行的项目不重复提交。
+  names = names.filter((n) => !state.pending[n]);
+  return names;
+}
+
+function updateGlobalButtons() {
+  // 只有更新任务会锁住全局按钮；启动/停止是异步的，可以连续点。
+  ["btn-start-core", "btn-update-all", "btn-stop-all"].forEach((id) => {
+    const el = $(id);
+    if (el) el.disabled = state.busy;
+  });
+}
+
+// 点击后立即给卡片打上“启动中/停止中”状态，不等后端返回。
+function setPending(action, target, on) {
+  // 清除时用目标全量列表，避免任务过程中状态已变化导致 pending 残留。
+  const names = on ? pendingNames(action, target) : targetNames(target);
+  names.forEach((name) => {
+    if (on) {
+      state.pending[name] = action;
+      state.pendingSince[name] = Date.now();
+    } else {
+      delete state.pending[name];
+      delete state.pendingSince[name];
+    }
+  });
+  renderProjects();
+  updateGlobalButtons();
+  if (on && action !== "update") scheduleFastPoll();
+}
+
+// 任务成功后先乐观更新卡片状态，随后 loadStatus 会再校准。
+function applyOptimistic(action, target) {
+  const names = new Set(pendingNames(action, target));
+  if (!names.size) return;
+  state.projects.forEach((p) => {
+    if (!names.has(p.name)) return;
+    if (action === "start" || action === "restart") p.running = true;
+    if (action === "stop") p.running = false;
+  });
+  renderProjects();
+}
+
+// 异步启动/停止期间加快状态轮询，直到所有 pending 结束。
+function scheduleFastPoll() {
+  if (state.fastTimer) clearTimeout(state.fastTimer);
+  const hasFast = Object.keys(state.pending).some((n) => state.pending[n] !== "update");
+  if (!hasFast) return;
+  state.fastTimer = setTimeout(async () => {
+    await loadStatus();
+    scheduleFastPoll();
+  }, 800);
+}
+
+async function loadStatus(showToast = false) {
+  // 任务进行中会每 1 秒刷新一次，避免和 3 秒轮询叠加导致请求堆积。
+  if (state.statusLoading) return;
+  state.statusLoading = true;
+  try {
+    const data = await api("/api/status");
+    const version = data.version || "";
+    if (state.serverVersion && version && version !== state.serverVersion) {
+      // 控制台文件已更新：只提示，不强制 location.reload()。
+      // 自动重载会把用户正在看的日志/代码弹窗一起关掉，拉取时尤其明显。
+      $("btn-reload").classList.remove("hidden");
+    }
+    state.serverVersion = version;
+    state.projects = data.projects || [];
+    state.localHost = data.local_host || state.localHost;
+    state.activeJob = data.active_job || null;
+    state.busy = !!(state.activeJob && state.activeJob.status === "running");
+
+    // 热更新操作成功后的短暂覆盖，避免状态缓存把按钮翻回旧状态。
+    Object.keys(state.watchOverride).forEach((name) => {
+      const override = state.watchOverride[name];
+      const p = state.projects.find((item) => item.name === name);
+      if (!p || Date.now() > override.until || p.watch === override.value) {
+        delete state.watchOverride[name];
+        return;
+      }
+      p.watch = override.value;
+    });
+
+    // 端口保存后 8 秒内强制用新端口，避免刚提交时拿到旧缓存又翻回去。
+    Object.keys(state.portOverride).forEach((name) => {
+      const override = state.portOverride[name];
+      const p = state.projects.find((item) => item.name === name);
+      if (!p || Date.now() > override.until || p.port === override.port) {
+        delete state.portOverride[name];
+        return;
+      }
+      p.port = override.port;
+      p.doc = swapLocalPort(p.doc, override.port);
+      p.entries = (p.entries || []).map((entry) => ({
+        ...entry,
+        url: swapLocalPort(entry.url, override.port),
+      }));
+    });
+
+    // 刷新页面或另一个标签页打开时，也能从 active_job 恢复更新任务 loading。
+    if (state.activeJob && state.activeJob.status === "running") {
+      pendingNames(state.activeJob.action, state.activeJob.target).forEach((name) => {
+        if (!state.pending[name]) {
+          state.pending[name] = state.activeJob.action;
+          state.pendingSince[name] = Date.now();
+        }
+      });
+    }
+
+    // 异步启动/停止：状态达到目标或拿到本次动作的退出码后清 pending。
+    Object.keys(state.pending).forEach((name) => {
+      const action = state.pending[name];
+      if (action === "update") return;
+      const p = state.projects.find((item) => item.name === name);
+      if (!p) return;
+
+      const since = state.pendingSince[name] || 0;
+      const elapsed = Date.now() - since;
+      if (elapsed < 1200) return;
+
+      // 热更新开关：状态真正切换后清除 loading。
+      if (action === "watch" || action === "unwatch") {
+        const done = action === "watch" ? p.watch : !p.watch;
+        if (done) {
+          delete state.pending[name];
+          delete state.pendingSince[name];
+        } else if (elapsed > 8000) {
+          delete state.pending[name];
+          delete state.pendingSince[name];
+          toast(`${name} 热更新状态未变化，请查看操作日志`, true);
+        }
+        return;
+      }
+
+      // 只接受本次点击之后产生的退出码，避免旧 action.exit 造成按钮闪回。
+      const exitTime = Number(p.action_exit_time || 0) * 1000;
+      const exitFresh = exitTime > 0 && exitTime >= since - 1500;
+
+      const expectedDone =
+        (action === "start" && p.running) ||
+        (action === "stop" && !p.running) ||
+        (action === "restart" && exitFresh && !p.action_running && p.running);
+
+      if (action !== "restart" && expectedDone) {
+        delete state.pending[name];
+        delete state.pendingSince[name];
+        return;
+      }
+
+      if (exitFresh && !p.action_running) {
+        delete state.pending[name];
+        delete state.pendingSince[name];
+        if (p.action_exit !== "0") {
+          toast(`${name} ${labelAction(action)}失败，请查看操作日志`, true);
+        } else {
+          if (action === "start" || action === "restart") p.running = true;
+          if (action === "stop") p.running = false;
+        }
+        return;
+      }
+
+      // 超过 2 分钟仍未结束，视为异常，避免 loading 永久卡住。
+      if (elapsed > 120000) {
+        delete state.pending[name];
+        delete state.pendingSince[name];
+        toast(`${name} ${labelAction(action)}超时，请查看操作日志`, true);
+      }
+    });
+
+    renderProjects();
+    updateSummary();
+    updateGlobalButtons();
+    if (state.activeJob && state.activeJob.status === "running" && !state.activeJobId) {
+      showJob(state.activeJob.id, true);
+    }
+    scheduleFastPoll();
+    if (showToast) toast("状态已刷新");
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    state.statusLoading = false;
+  }
+}
+
+function updateSummary() {
+  const total = state.projects.length;
+  const running = state.projects.filter((p) => p.running).length;
+  $("running-count").textContent = running;
+  $("total-count").textContent = total;
+  // 探活异常：只统计运行中且判定 down 的项目，停止的不算异常而是用户自己停的。
+  const unhealthy = state.projects.filter((p) => p.running && p.health && p.health.state === "down").length;
+  const unhealthyEl = $("unhealthy-count");
+  if (unhealthyEl) {
+    unhealthyEl.textContent = unhealthy;
+    unhealthyEl.classList.toggle("bad", unhealthy > 0);
+    const hint = $("unhealthy-hint");
+    if (hint) hint.textContent = unhealthy > 0 ? "需要处理" : "全部正常";
+  }
+  $("last-refresh").textContent = "更新于 " + new Date().toLocaleTimeString();
+  $("active-job-text").textContent = state.activeJob
+    ? `任务中：${labelAction(state.activeJob.action)} ${state.activeJob.target}`
+    : "空闲";
+  // 更新任务进行中时，summary 里保留一个入口，方便关掉弹框后随时回到更新日志。
+  $("btn-job-view").classList.toggle("hidden", !state.activeJob);
+  updateGlobalButtons();
+}
+
+// 切换“后端服务 / 前端项目”页签。
+function setListTab(key) {
+  if (key !== "backend" && key !== "frontend") return;
+  state.listTab = key;
+  state.listTabChosen = true;
+  state.lastRenderSignature = null;
+  renderProjects();
+}
+
+// 卡片翻转：不改状态接口，只切换 CSS 类和本地记录。
+function toggleCardFlip(button, name) {
+  const card = button.closest(".card");
+  if (!card) return;
+  const flipped = card.classList.toggle("flipped");
+  state.flipped[name] = flipped;
+}
+
+function renderProjects() {
+  // 状态没有实质变化时不重建 DOM，避免 0.8 秒轮询造成按钮闪烁。
+  const signature = JSON.stringify({
+    tab: state.listTab,
+    projects: state.projects.map((p) => [
+      p.name, p.running, p.pid, p.port, p.watch, p.core,
+      (p.entries || []).map((entry) => entry.url).join(","),
+      p.git ? [p.git.ok, p.git.branch, p.git.dirty, p.git.ahead, p.git.behind] : null,
+      p.install || "",
+      p.type || "backend",
+      p.health ? [p.health.state, p.health.restarts, p.health.failures, p.health.auto_restart] : null,
+    ]),
+    pending: Object.keys(state.pending).sort().map((name) => [name, state.pending[name]]),
+    busy: state.busy,
+  });
+  if (signature === state.lastRenderSignature) return;
+  state.lastRenderSignature = signature;
+
+  const container = $("projects");
+
+  const groups = [
+    {
+      key: "backend", empty: "还没有后端服务，点右上角“添加项目”选择后端 Java 服务。",
+      items: state.projects.filter((p) => p.type !== "frontend"),
+    },
+    {
+      key: "frontend", empty: "还没有前端项目，点右上角“添加项目”选择前端 Node 项目。",
+      items: state.projects.filter((p) => p.type === "frontend"),
+    },
+  ];
+
+  // 第一次加载时，如果默认的后端页签是空的，就自动切到有项目的一类。
+  if (!state.listTabChosen) {
+    state.listTab = groups[0].items.length ? "backend" : "frontend";
+    state.listTabChosen = true;
+  }
+
+  // 更新页签数字和选中态。
+  groups.forEach((group) => {
+    const button = $("tab-" + group.key);
+    const count = $("tab-" + group.key + "-count");
+    if (count) count.textContent = group.items.length;
+    if (button) {
+      const active = group.key === state.listTab;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    }
+  });
+
+  const activeGroup = groups.find((group) => group.key === state.listTab) || groups[0];
+  container.innerHTML = "";
+  if (!activeGroup.items.length) {
+    const empty = document.createElement("div");
+    empty.className = "group-empty";
+    empty.textContent = activeGroup.empty;
+    container.appendChild(empty);
+  }
+
+  activeGroup.items.forEach((p) => {
+    // 只根据本地点击显示 loading；状态接口负责清理和校准。
+    const pending = state.pending[p.name];
+    // 健康状态：ok=绿、degraded=黄（还在观察）、down=红（连续失败，可能已自动重启）。
+    // 必须在创建卡片前算出来，卡片样式类要用。
+    const health = p.health || {};
+    const healthState = health.state || "unknown";
+    const card = document.createElement("article");
+    card.className = "card" + (p.running ? " is-running" : "") + (pending ? " is-pending" : "")
+      + (p.running && healthState === "down" ? " is-down" : "")
+      + (state.flipped[p.name] ? " flipped" : "");
+
+    const badges = [];
+    if (pending) {
+      badges.push(`<span class="badge pending"><span class="spinner"></span>${pendingLabel(pending)}</span>`);
+    }
+    if (p.type === "frontend") badges.push('<span class="badge frontend">前端</span>');
+    if (p.core) badges.push('<span class="badge core">核心</span>');
+    if (p.watch) badges.push('<span class="badge watch">热更新</span>');
+
+    if (p.running && healthState === "down") {
+      badges.push(`<span class="badge health-bad">探活失败${health.restarts ? ` · 已重启 ${health.restarts} 次` : ""}</span>`);
+    } else if (p.running && healthState === "degraded") {
+      badges.push(`<span class="badge health-warn">探活异常 ${health.failures || 1} 次</span>`);
+    } else if (p.running && healthState === "ok" && health.restarts > 0) {
+      badges.push(`<span class="badge health-ok">自愈 ${health.restarts} 次</span>`);
+    }
+    const dotClass = pending ? " pending"
+      : !p.running ? ""
+        : healthState === "down" ? " bad"
+          : healthState === "degraded" ? " warn"
+            : healthState === "ok" ? " on" : " on";
+
+    badges.push(`<span class="badge ${p.running ? "running" : "stopped"}">${p.running ? "运行中" : "已停止"}</span>`);
+
+    const locked = !!pending || state.busy;
+    const disabled = locked ? " disabled" : "";
+    const label = (action, text) => (
+      pending === action
+        ? `<span class="spinner"></span> ${pendingLabel(action)}`
+        : text
+    );
+    const watchLabel = pending === "watch"
+      ? `<span class="spinner"></span> 开启中`
+      : pending === "unwatch"
+        ? `<span class="spinner"></span> 关闭中`
+        : p.watch ? "停止热更" : "热更新";
+
+    // 停止中仍显示停止按钮、启动中仍显示启动按钮，避免按钮位置跳动。
+    const displayRunning = pending === "stop" ? true : pending === "start" ? false : p.running;
+
+    const primaryActions = [];
+    const toolActions = [];
+    if (displayRunning) {
+      primaryActions.push(`<button class="btn danger small"${disabled} data-action="stop" data-target="${escapeHtml(p.name)}">${label("stop", "停止")}</button>`);
+      primaryActions.push(`<button class="btn soft small"${disabled} data-action="restart" data-target="${escapeHtml(p.name)}">${label("restart", "重启")}</button>`);
+    } else {
+      primaryActions.push(`<button class="btn primary small"${disabled} data-action="start" data-target="${escapeHtml(p.name)}">${label("start", "启动")}</button>`);
+    }
+    primaryActions.push(`<button class="btn soft small"${disabled} data-action="update" data-target="${escapeHtml(p.name)}">${label("update", "更新")}</button>`);
+    // 前端开发服务器自己有 HMR，不需要控制台的“热更新”（那是 Maven 重编译监听）。
+    if (p.type !== "frontend") {
+      primaryActions.push(`<button class="btn ${p.watch ? "warn" : "soft"} small"${disabled} data-action="${p.watch ? "unwatch" : "watch"}" data-target="${escapeHtml(p.name)}">${watchLabel}</button>`);
+    }
+
+    toolActions.push(`<button class="link-btn" data-action="log" data-target="${escapeHtml(p.name)}">日志</button>`);
+    toolActions.push(`<button class="link-btn" data-action="actionlog" data-target="${escapeHtml(p.name)}">操作日志</button>`);
+    toolActions.push(`<button class="link-btn" data-action="git" data-target="${escapeHtml(p.name)}">代码</button>`);
+    toolActions.push(`<button class="link-btn" data-action="settings" data-target="${escapeHtml(p.name)}">设置</button>`);
+
+    // git 状态：分支、未提交改动（不含未跟踪文件）、领先/落后远端提交数。
+    const git = p.git && p.git.ok ? p.git : null;
+    const gitBits = [];
+    if (git) {
+      if (git.branch) gitBits.push(escapeHtml(git.branch));
+      if (git.dirty > 0) gitBits.push(`<span class="git-dirty">${git.dirty} 处改动</span>`);
+      if (git.ahead > 0) gitBits.push(`<span class="git-ahead">↑${git.ahead}</span>`);
+      if (git.behind > 0) gitBits.push(`<span class="git-behind">↓${git.behind}</span>`);
+    }
+    const gitChip = git && gitBits.length
+      ? `<span class="meta-chip git" title="分支 ${escapeHtml(git.branch || "-")}${git.upstream ? "，跟踪 " + escapeHtml(git.upstream) : ""}；未提交改动 ${git.dirty} 处（不含未跟踪文件）；↑ 领先远端，↓ 落后远端">${gitBits.join(" ")}</span>`
+      : "";
+
+    let entries = Array.isArray(p.entries) ? p.entries : [];
+    // 前端项目始终要有页面入口：entries.conf 没配时用首页地址兜底。
+    if (p.type === "frontend" && entries.length === 0) {
+      entries = [{
+        label: "前端页面",
+        url: swapLocalPort(p.doc, p.port),
+        description: "前端开发服务器首页",
+      }];
+    }
+    // 后端没有单独入口时，背面展示默认的接口文档。
+    if (p.type !== "frontend" && entries.length === 0 && p.doc) {
+      entries = [{ label: "接口文档", url: p.doc, description: "Knife4j 接口文档" }];
+    }
+
+    // 背面入口：运行中可直接打开，未运行只提示先启动。
+    const backLinks = entries.length
+      ? entries.map((entry) => p.running
+        ? `<a class="entry-link" href="${escapeHtml(entry.url)}" target="_blank" rel="noopener" title="${escapeHtml(entry.description || entry.label)}">${escapeHtml(entry.label)}</a>`
+        : `<button class="entry-link disabled" title="先启动 ${escapeHtml(p.name)}" onclick="toast('请先启动 ${escapeHtml(p.name)}，再打开页面', true)">${escapeHtml(entry.label)}（启动后可打开）</button>`
+      ).join("")
+      : '<span class="back-hint">这个项目没有配置页面入口。</span>';
+
+    // 正面也放一个翻转按钮，提示入口在卡片背面。
+    toolActions.push(`<button class="link-btn" data-action="flip" data-target="${escapeHtml(p.name)}">${p.type === "frontend" ? "页面入口 ↗" : "文档 ↗"}</button>`);
+
+    const stateBadge = `<span class="badge ${p.running ? "running" : "stopped"}">${p.running ? "运行中" : "已停止"}</span>`;
+    card.innerHTML = `
+      <div class="card-flip">
+        <div class="card-face card-front">
+          <div class="card-head">
+            <div class="service-name">
+              <span class="status-dot${dotClass}"></span>
+              <h2>${escapeHtml(p.name)}</h2>
+              <button class="port port-edit" data-action="port" data-target="${escapeHtml(p.name)}" title="点击修改端口">:${p.port} ✎</button>
+            </div>
+            <div class="badges">${badges.join("")}</div>
+          </div>
+          <div class="meta">
+            <span class="meta-chip">PID <b>${escapeHtml(p.pid || "-")}</b></span>
+            <span class="meta-chip">${p.running ? "端口监听中" : "未监听"}</span>
+            ${gitChip}
+          </div>
+          <div class="actions">${primaryActions.join("")}</div>
+          <div class="tools">${toolActions.join("")}</div>
+        </div>
+        <div class="card-face card-back">
+          <div class="back-head">
+            <div class="back-title">
+              <h2>${escapeHtml(p.name)}</h2>
+              <span class="port">:${p.port}</span>
+            </div>
+            <div class="back-head-right">
+              ${stateBadge}
+            </div>
+          </div>
+          <div class="back-label">${p.type === "frontend" ? "页面入口" : "接口文档"}${entries.length > 1 ? ` · ${entries.length} 个` : ""}</div>
+          <div class="back-links">${backLinks}</div>
+          <div class="back-actions">
+            <button class="btn soft small" data-action="port" data-target="${escapeHtml(p.name)}">修改端口 :${p.port}</button>
+            <button class="btn ghost small" data-action="flip" data-target="${escapeHtml(p.name)}">返回</button>
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  container.querySelectorAll("button[data-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.dataset.action;
+      const target = btn.dataset.target;
+      if (action === "log") openLog(target, "service");
+      else if (action === "actionlog") openLog(target, "action");
+      else if (action === "git") openGit(target);
+      else if (action === "port") openPortModal(target);
+      else if (action === "settings") openSettings(target);
+      else if (action === "flip") toggleCardFlip(btn, target);
+      else runAction(action, target);
+    });
+  });
+
+  // 背面入口放不下时，在标题上标一句“滚动查看”，否则只看得到前两个会以为丢了。
+  container.querySelectorAll(".card-back").forEach((back) => {
+    const links = back.querySelector(".back-links");
+    const label = back.querySelector(".back-label");
+    if (links && label && links.scrollHeight > links.clientHeight + 2) {
+      label.textContent += "（滚动查看）";
+    }
+  });
+
+  if (state.logProject && !$("log-panel").classList.contains("hidden")) {
+    renderLogTabs();
+    renderLogSourceTabs();
+  }
+}
+
+async function runFastAction(action, target) {
+  if (state.busy) {
+    toast("更新任务执行中，请稍后再操作", true);
+    return;
+  }
+  if (target === "all" && action === "stop") {
+    if (!confirm("停止所有已启动的项目？")) return;
+  }
+
+  const names = pendingNames(action, target);
+  if (!names.length) {
+    toast("没有需要操作的项目");
+    return;
+  }
+
+  // 立即显示 loading，不等待后端进程结束；不同项目可以并行操作。
+  names.forEach((name) => {
+    state.pending[name] = action;
+    state.pendingSince[name] = Date.now();
+  });
+  renderProjects();
+  scheduleFastPoll();
+
+  try {
+    const data = await api("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: action + "-bg", target }),
+    });
+    toast(data.message || "操作已提交");
+    scheduleFastPoll();
+  } catch (e) {
+    names.forEach((name) => {
+      delete state.pending[name];
+      delete state.pendingSince[name];
+    });
+    renderProjects();
+    updateGlobalButtons();
+    toast(e.message, true);
+  }
+}
+
+async function runWatchAction(action, target) {
+  if (state.busy) {
+    toast("更新任务执行中，请稍后再操作", true);
+    return;
+  }
+  if (state.pending[target]) {
+    toast("该项目正在执行其他操作", true);
+    return;
+  }
+
+  // 热更新开关也显示 loading，等状态真正切换后再清除。
+  setPending(action, target, true);
+
+  try {
+    const data = await api("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, target }),
+    });
+
+    // 接口成功代表监听进程已启动/已停止；先本地切换，状态缓存稍后再校准。
+    const p = state.projects.find((item) => item.name === target);
+    if (p) {
+      p.watch = action === "watch";
+      state.watchOverride[target] = {
+        value: p.watch,
+        until: Date.now() + 10000,
+      };
+    }
+    delete state.pending[target];
+    delete state.pendingSince[target];
+    renderProjects();
+    toast(data.message || (action === "watch" ? "热更新已开启" : "热更新已停止"));
+    loadStatus();
+  } catch (e) {
+    setPending(action, target, false);
+    toast(e.message, true);
+  }
+}
+
+async function runAction(action, target) {
+  if (action === "start" || action === "stop" || action === "restart") {
+    return runFastAction(action, target);
+  }
+  if (action === "watch" || action === "unwatch") {
+    return runWatchAction(action, target);
+  }
+
+  // 下面只剩更新：仍然是后台 job，面板里可以看构建输出。
+  if (state.busy) {
+    toast("有任务正在执行，请等待完成", true);
+    return;
+  }
+  if (Object.keys(state.pending).length > 0) {
+    toast("有服务正在启动/停止/切换热更新，请稍后再更新", true);
+    return;
+  }
+  if (target === "all") {
+    if (!confirm("更新所有项目（会逐个拉取、构建并重启）？")) return;
+  }
+
+  state.busy = true;
+  setPending(action, target, true);
+
+  try {
+    const data = await api("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, target }),
+    });
+
+    if (data.job_id) {
+      showJob(data.job_id);
+      toast(`${labelAction(action)} ${target} 已开始`);
+    } else {
+      setPending(action, target, false);
+      state.busy = false;
+      toast(data.message || "操作完成");
+      loadStatus();
+    }
+  } catch (e) {
+    setPending(action, target, false);
+    state.busy = false;
+    updateGlobalButtons();
+    toast(e.message, true);
+  }
+}
+
+// 打开更新任务：既负责后台轮询状态，也把弹框切到“更新日志”。
+function showJob(id, silent = false) {
+  state.activeJobId = id;
+  if (!silent || !state.viewJobId) state.viewJobId = id;
+  if (!silent) openJobLog(id);
+  state.busy = true;
+  updateGlobalButtons();
+  if (state.jobTimer) clearInterval(state.jobTimer);
+  state.jobTimer = setInterval(pollJob, 1000);
+  pollJob();
+}
+
+// 轮询当前更新任务；只由 activeJobId 驱动，看历史任务不会触发轮询。
+async function pollJob() {
+  const jobId = state.activeJobId;
+  if (!jobId) return;
+
+  try {
+    const job = await api("/api/job?id=" + encodeURIComponent(jobId));
+
+    // 弹框正在看这个任务时同步渲染，避免前端重复请求 /api/job。
+    if (state.logKind === "job" && state.viewJobId === jobId) {
+      renderJobView(job);
+    }
+
+    state.busy = job.status === "running";
+    updateGlobalButtons();
+
+    if (job.status === "running") {
+      // 任务进行中每 1 秒同步一次状态，卡片能更快从“启动中/停止中”切到最终状态。
+      loadStatus();
+    }
+
+    if (job.status !== "running") {
+      // 先结束轮询，避免下面自动打开日志时再次进入 pollJob。
+      clearInterval(state.jobTimer);
+      state.jobTimer = null;
+      state.activeJobId = null;
+
+      // 先清除 loading，再对 start/stop/restart 做乐观更新，最后用状态接口校准。
+      setPending(job.action, job.target, false);
+      if (job.status === "done") applyOptimistic(job.action, job.target);
+      // 单个项目启动/重启完成后自动打开服务日志，直接看到 Spring Boot 启动信息。
+      if ((job.action === "start" || job.action === "restart") &&
+          job.target !== "all" && job.target !== "core") {
+        openLog(job.target);
+      }
+      // 更新失败时自动弹到更新日志；弹框已经停在该任务上时不打断用户。
+      const viewingThisJob =
+        state.logKind === "job" &&
+        state.viewJobId === jobId &&
+        !$("log-panel").classList.contains("hidden");
+      if (job.status === "failed" && !viewingThisJob) {
+        openJobLog(jobId);
+      }
+
+      state.busy = false;
+      updateGlobalButtons();
+      loadStatus();
+      setTimeout(loadStatus, 300);
+      loadJobHistory();
+    }
+  } catch (e) {
+    clearInterval(state.jobTimer);
+    state.jobTimer = null;
+    state.activeJobId = null;
+    state.busy = false;
+    state.pending = {};
+    renderProjects();
+    updateGlobalButtons();
+    toast(e.message, true);
+  }
+}
+
+async function stopCurrentJob() {
+  const jobId = state.activeJobId || state.viewJobId;
+  if (!jobId) return;
+  try {
+    await api("/api/job/stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: jobId }),
+    });
+    toast("已请求停止任务");
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// 从文本里挑出构建失败的关键行，放在日志上方做摘要。
+function jobErrorLines(output) {
+  const seen = new Set();
+  const hits = [];
+  String(output || "").split("\n").forEach((line) => {
+    const text = line.trim();
+    if (!text || seen.has(text)) return;
+    if (!/(\[ERROR\]|BUILD FAILURE|BUILD ERROR|编译失败|构建失败|Failed to execute|Could not resolve|Cannot find)/i.test(text)) return;
+    seen.add(text);
+    hits.push(text.length > 240 ? text.slice(0, 240) + "…" : text);
+  });
+  if (hits.length <= 5) return hits;
+  return [...hits.slice(0, 3), "…", ...hits.slice(-2)];
+}
+
+function renderJobHistory() {
+  const select = $("job-history");
+  if (!select) return;
+  const statusLabels = {
+    running: "执行中", done: "完成", failed: "失败", stopped: "已停止", unknown: "历史",
+  };
+  const options = state.jobHistory.map((job) => {
+    const time = job.started
+      ? new Date(job.started * 1000).toLocaleString("zh-CN", {
+          month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+        })
+      : "";
+    const status = statusLabels[job.status] || job.status;
+    const target = job.target || "历史任务";
+    return `<option value="${escapeHtml(job.id)}">${escapeHtml(`${labelAction(job.action)} ${target} · ${time} · ${status}`)}</option>`;
+  });
+  select.innerHTML = options.length ? options.join("") : '<option value="">暂无更新任务</option>';
+  if (state.viewJobId) select.value = state.viewJobId;
+}
+
+// 任务历史来自后端 /api/jobs（内存 + sidecar 合并），控制台重启后也能回看。
+async function loadJobHistory() {
+  try {
+    const data = await api("/api/jobs");
+    state.jobHistory = data.jobs || [];
+    renderJobHistory();
+    // 打开“更新日志”时默认展示最近一次任务；已有查看对象时不打断。
+    if (state.logKind === "job" && !state.viewJobId && state.jobHistory.length) {
+      state.viewJobId = state.jobHistory[0].id;
+      refreshJobView(true);
+    }
+  } catch (e) {
+    // 历史接口失败不影响当前更新流程。
+  }
+}
+
+function selectHistoryJob(id) {
+  if (!id) return;
+  state.viewJobId = id;
+  refreshJobView(true);
+}
+
+function ensureJobInHistory(job) {
+  if (!job || !job.id) return;
+  if (state.jobHistory.some((item) => item.id === job.id)) return;
+  state.jobHistory.unshift(job);
+  renderJobHistory();
+}
+
+function updateJobBar(job) {
+  const select = $("job-history");
+  const badge = $("job-badge");
+  const meta = $("job-meta");
+  const stop = $("job-stop");
+
+  if (!job) {
+    badge.textContent = "";
+    badge.className = "badge hidden";
+    meta.textContent = "";
+    stop.classList.add("hidden");
+    return;
+  }
+
+  ensureJobInHistory(job);
+  if (select) select.value = job.id;
+
+  const labels = {
+    running: "执行中", done: "已完成", failed: "失败", stopped: "已停止", unknown: "历史",
+  };
+  badge.textContent = labels[job.status] || job.status;
+  badge.className = "badge " + (
+    job.status === "running" ? "watch" :
+    job.status === "done" ? "running" :
+    job.status === "failed" ? "failed" : "pending"
+  );
+  stop.classList.toggle("hidden", job.status !== "running");
+
+  const startText = job.started ? new Date(job.started * 1000).toLocaleString() : "";
+  let durationText = "";
+  if (job.started) {
+    const endSeconds = job.ended || Date.now() / 1000;
+    const seconds = Math.max(0, Math.round(endSeconds - job.started));
+    durationText = seconds >= 60
+      ? `用时 ${Math.floor(seconds / 60)}分${seconds % 60}秒`
+      : `用时 ${seconds}秒`;
+  }
+  meta.textContent = [
+    startText,
+    durationText,
+    job.exit_code != null ? `退出码 ${job.exit_code}` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+function renderJobView(job, scrollBottom = false) {
+  updateJobBar(job);
+
+  const out = $("log-output");
+  const atBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 40;
+  const rendered = renderLogContent(job.output || "", false);
+  out.innerHTML = job.output
+    ? rendered.html
+    : '<span class="log-line">(暂无输出)</span>';
+  if (scrollBottom || atBottom) out.scrollTop = out.scrollHeight;
+
+  const summary = $("log-summary");
+  const parts = [`<span>${escapeHtml(labelAction(job.action))} ${escapeHtml(job.target)} · ${rendered.total} 行</span>`];
+  if (job.status === "running") parts.push('<span class="warn">构建中</span>');
+  if (rendered.errors > 0) parts.push(`<span class="bad">报错 ${rendered.errors}</span>`);
+  summary.innerHTML = parts.join("");
+
+  // 失败/历史任务把关键错误固定在顶部，不用在几百行 Maven 输出里翻。
+  const box = $("job-error-summary");
+  const errors = jobErrorLines(job.output || "");
+  if (errors.length && (job.status === "failed" || job.status === "unknown")) {
+    box.innerHTML = `<strong>失败摘要</strong>\n${errors.map(escapeHtml).join("\n")}`;
+    box.classList.remove("hidden");
+  } else {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+  }
+}
+
+async function refreshJobView(scrollBottom = false) {
+  const jobId = state.viewJobId || state.activeJobId;
+  if (!jobId) {
+    updateJobBar(null);
+    $("log-summary").innerHTML = "";
+    $("job-error-summary").classList.add("hidden");
+    $("log-output").innerHTML = '<span class="log-line">(还没有更新任务，点击“更新”后这里会显示构建日志)</span>';
+    return;
+  }
+
+  // 正在执行的任务由 jobTimer 每秒刷新，这里只补一次立即渲染。
+  if (jobId === state.activeJobId) {
+    pollJob();
+    return;
+  }
+
+  try {
+    const job = await api("/api/job?id=" + encodeURIComponent(jobId));
+    renderJobView(job, scrollBottom);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function openJobLog(jobId = null) {
+  if (jobId) state.viewJobId = jobId;
+  state.logKind = "job";
+  state.logProject = null;
+  $("log-panel").classList.remove("hidden");
+  updateLogTitle();
+  updateLogModeButtons();
+  updateLogLayout();
+  loadJobHistory();
+  refreshJobView(true);
+  ensureLogTimer();
+}
+
+// summary 里的“查看更新日志”优先跳到正在执行的任务。
+function openActiveJobLog() {
+  openJobLog(state.activeJobId || state.viewJobId);
+}
+
+function getLogProject() {
+  return state.projects.find((item) => item.name === state.logProject);
+}
+
+function logSources(project, kind) {
+  return (project && project.log_sources && project.log_sources[kind]) || [];
+}
+
+function updateLogModeButtons() {
+  $("log-mode-service").classList.toggle("is-active", state.logKind === "service");
+  $("log-mode-action").classList.toggle("is-active", state.logKind === "action");
+  $("log-mode-job").classList.toggle("is-active", state.logKind === "job");
+}
+
+// 按日志类型切换弹框布局：更新日志使用任务历史条，服务/操作日志使用项目条。
+function updateLogLayout() {
+  const isJob = state.logKind === "job";
+  $("log-projects-bar").classList.toggle("hidden", isJob);
+  $("log-service-tools").classList.toggle("hidden", isJob);
+  $("log-job-tools").classList.toggle("hidden", !isJob);
+  $("log-job-bar").classList.toggle("hidden", !isJob);
+  if (isJob) {
+    $("log-source-tabs").classList.add("hidden");
+    $("log-filter").classList.add("hidden");
+  } else {
+    renderLogSourceTabs();
+    $("log-filter").classList.remove("hidden");
+  }
+}
+
+function updateLogTabScrollButtons() {
+  const container = $("log-tabs");
+  if (!container) return;
+  const wrap = container.closest(".log-tabs-wrap");
+  if (!wrap) return;
+  const buttons = wrap.querySelectorAll(".tab-scroll-btn");
+  const max = container.scrollWidth - container.clientWidth;
+  if (buttons[0]) buttons[0].disabled = container.scrollLeft <= 1;
+  if (buttons[1]) buttons[1].disabled = container.scrollLeft >= max - 1;
+}
+
+function scrollLogTabs(direction) {
+  const container = $("log-tabs");
+  if (!container) return;
+  container.scrollBy({
+    left: direction * Math.max(180, container.clientWidth * 0.7),
+    behavior: "smooth",
+  });
+}
+
+function renderLogTabs() {
+  const container = $("log-tabs");
+  if (!container) return;
+  const projects = [...state.projects].sort((a, b) => {
+    return Number(b.running) - Number(a.running) || a.name.localeCompare(b.name);
+  });
+  container.innerHTML = projects.map((p) => `
+    <button class="log-tab${p.name === state.logProject ? " is-active" : ""}${p.running ? "" : " is-stopped"}"
+      title="${p.running ? "运行中" : "已停止"} · 点击查看日志"
+      onclick="switchLogProject('${escapeHtml(p.name)}')">
+      <span class="tab-dot${p.running ? " on" : ""}"></span>${escapeHtml(p.name)}
+    </button>
+  `).join("");
+
+  if (!container.dataset.scrollBound) {
+    container.dataset.scrollBound = "1";
+    container.addEventListener("scroll", updateLogTabScrollButtons, { passive: true });
+  }
+
+  requestAnimationFrame(() => {
+    const active = container.querySelector(".log-tab.is-active");
+    if (active) {
+      const box = container.getBoundingClientRect();
+      const rect = active.getBoundingClientRect();
+      if (rect.left < box.left) container.scrollLeft -= box.left - rect.left + 8;
+      if (rect.right > box.right) container.scrollLeft += rect.right - box.right + 8;
+    }
+    updateLogTabScrollButtons();
+  });
+}
+
+function renderLogSourceTabs() {
+  const container = $("log-source-tabs");
+  const project = getLogProject();
+  const sources = logSources(project, state.logKind);
+
+  if (state.logKind === "action" || state.logKind === "job" || sources.length <= 1) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+  if (!sources.some((item) => item.key === state.logSource)) {
+    state.logSource = sources[0].key;
+  }
+  container.classList.remove("hidden");
+  container.innerHTML = sources.map((item) => `
+    <button class="source-tab${item.key === state.logSource ? " is-active" : ""}"
+      onclick="setLogSource('${escapeHtml(item.key)}')">${escapeHtml(item.label)}</button>
+  `).join("");
+}
+
+function updateLogTitle() {
+  if (state.logKind === "job") {
+    $("log-title").textContent = "更新日志";
+    return;
+  }
+  if (!state.logProject) return;
+  $("log-title").textContent = `${state.logKind === "action" ? "操作日志" : "日志"} · ${state.logProject}`;
+}
+
+function switchLogProject(project) {
+  state.logProject = project;
+  state.logSource = null;
+  updateLogTitle();
+  renderLogTabs();
+  renderLogSourceTabs();
+  refreshLog(true);
+}
+
+function setLogKind(kind) {
+  if (kind === "job") {
+    openJobLog(state.viewJobId || state.activeJobId);
+    return;
+  }
+  state.logKind = kind === "action" ? "action" : "service";
+  // 从更新日志切回服务日志时，如果还没选项目就默认第一个。
+  if (!state.logProject) state.logProject = (state.projects[0] || {}).name || null;
+  state.logSource = null;
+  updateLogTitle();
+  updateLogModeButtons();
+  updateLogLayout();
+  renderLogTabs();
+  refreshLog(true);
+  ensureLogTimer();
+}
+
+function setLogSource(source) {
+  state.logSource = source;
+  renderLogSourceTabs();
+  refreshLog(true);
+}
+
+function openLog(project, kind = "service", source = null) {
+  state.logProject = project;
+  state.logKind = kind === "action" ? "action" : "service";
+  state.logSource = source;
+  $("log-panel").classList.remove("hidden");
+  updateLogTitle();
+  updateLogModeButtons();
+  updateLogLayout();
+  renderLogTabs();
+  refreshLog(true);
+  ensureLogTimer();
+}
+
+// 服务/操作日志每 2 秒刷新；更新日志由任务轮询驱动，不在这里重复请求。
+function ensureLogTimer() {
+  if (state.logTimer) clearInterval(state.logTimer);
+  state.logTimer = setInterval(() => {
+    if (state.logKind === "job") return;
+    if ($("log-auto").checked) refreshLog();
+  }, 2000);
+}
+
+const LOG_ERROR_PATTERN = /(^|\s)(ERROR|FATAL|SEVERE|严重|错误)(\s|:|$)/i;
+const LOG_EXCEPTION_PATTERN = /Exception|Caused by|Failed|失败/i;
+const LOG_WARN_PATTERN = /(^|\s)(WARN|WARNING|警告)(\s|:|$)/i;
+const LOG_STACK_PATTERN = /^\s+at\s|^\s*\.\.\. \d+ more|^Caused by/;
+
+function classifyLogLine(line) {
+  if (LOG_ERROR_PATTERN.test(line) || LOG_EXCEPTION_PATTERN.test(line)) return "error";
+  if (LOG_WARN_PATTERN.test(line)) return "warn";
+  if (LOG_STACK_PATTERN.test(line)) return "stack";
+  return "";
+}
+
+function renderLogContent(content, errorsOnly, keyword, level) {
+  const words = String(keyword || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const minLevel = level || "all";
+  const lines = String(content || "").split("\n");
+  const html = [];
+  const kept = [];
+  let errors = 0;
+  let warnings = 0;
+  let shown = 0;
+
+  lines.forEach((line) => {
+    const severity = classifyLogLine(line);
+    if (severity === "error") errors += 1;
+    if (severity === "warn") warnings += 1;
+
+    // 级别过滤：error = 报错和堆栈；warn = 报错 + 警告。
+    if (errorsOnly && severity !== "error" && severity !== "stack") return;
+    if (minLevel === "error" && severity !== "error" && severity !== "stack") return;
+    if (minLevel === "warn" && !["error", "stack", "warn"].includes(severity)) return;
+
+    // 关键字过滤：多个词按“都要命中”处理，方便同时筛服务名和异常名。
+    if (words.length) {
+      const lower = line.toLowerCase();
+      if (!words.every((word) => lower.includes(word))) return;
+    }
+
+    shown += 1;
+    kept.push(line);
+    html.push(`<span class="log-line${severity ? ` ${severity}` : ""}">${highlightLogLine(line, words) || " "}</span>`);
+  });
+
+  return { html: html.join("\n"), errors, warnings, total: lines.length, shown, kept };
+}
+
+// 关键字高亮：先按匹配位置切段，再逐段转义，避免把日志里的 < > 当成 HTML。
+function highlightLogLine(line, words) {
+  if (!words || !words.length) return escapeHtml(line);
+  const escaped = words
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .filter(Boolean);
+  if (!escaped.length) return escapeHtml(line);
+  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+  return String(line)
+    .split(pattern)
+    .map((part, index) => (index % 2 ? `<mark>${escapeHtml(part)}</mark>` : escapeHtml(part)))
+    .join("");
+}
+
+// 按当前的关键字/级别/只看报错重新渲染日志，不发请求（原文已缓存在 state.logContent）。
+function renderLogView(scrollBottom = false) {
+  const out = $("log-output");
+  if (!out) return;
+  const errorsOnly = $("log-errors-only").checked;
+  const keyword = $("log-keyword") ? $("log-keyword").value : "";
+  const level = $("log-level") ? $("log-level").value : "all";
+  state.logKeyword = keyword;
+  state.logLevel = level;
+
+  const previousScrollTop = out.scrollTop;
+  const atBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 40;
+  const rendered = renderLogContent(state.logContent || "", errorsOnly, keyword, level);
+  const emptyText = state.logKind === "action"
+    ? "(还没有操作日志，启动/停止/重启后会出现)"
+    : "(日志文件尚未生成，启动服务后再看)";
+
+  if (!state.logContent) {
+    out.innerHTML = `<span class="log-line">${escapeHtml(emptyText)}</span>`;
+  } else if (rendered.shown === 0) {
+    out.innerHTML = '<span class="log-line">当前筛选条件下没有匹配的行，可清空关键字或把级别调回“全部级别”。</span>';
+  } else {
+    out.innerHTML = rendered.html;
+  }
+
+  const summary = $("log-summary");
+  const parts = [`<span>${escapeHtml(state.logLabel || "")} · 显示 ${rendered.shown}/${rendered.total} 行</span>`];
+  if (rendered.errors > 0) parts.push(`<span class="bad">报错 ${rendered.errors}</span>`);
+  else parts.push("<span>未发现报错</span>");
+  if (rendered.warnings > 0) parts.push(`<span class="warn">警告 ${rendered.warnings}</span>`);
+  summary.innerHTML = parts.join("");
+
+  const info = $("log-filter-info");
+  if (info) {
+    const filters = [];
+    if (keyword.trim()) filters.push(`关键字“${keyword.trim()}”`);
+    if (level !== "all") filters.push(level === "error" ? "仅 ERROR" : "ERROR+WARN");
+    if (errorsOnly) filters.push("只看报错");
+    info.textContent = filters.length ? `已过滤：${filters.join(" / ")}` : "";
+  }
+
+  state.logFiltered = rendered.kept;
+  if (scrollBottom || atBottom) out.scrollTop = out.scrollHeight;
+  else out.scrollTop = previousScrollTop;
+}
+
+function applyLogFilter() {
+  renderLogView(false);
+}
+
+// 导出当前视图（受关键字/级别/只看报错影响），文件名带项目和来源，方便发给别人排查。
+function exportLog() {
+  const lines = state.logFiltered || [];
+  if (!lines.length) {
+    toast("当前视图没有内容可导出", true);
+    return;
+  }
+  const header = [
+    `# 项目：${state.logProject || "-"}`,
+    `# 来源：${state.logLabel || "-"}（${state.logKind === "action" ? "操作日志" : "服务日志"}）`,
+    `# 导出时间：${new Date().toLocaleString()}`,
+    `# 行数：${lines.length}`,
+    "",
+  ].join("\n");
+  const blob = new Blob([header + lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${state.logProject || "log"}-${state.logSource || "log"}.log`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function refreshLog(scrollBottom = false) {
+  if (!state.logProject) return;
+  try {
+    const kind = state.logKind;
+    const project = getLogProject();
+    const sources = logSources(project, kind);
+    if (!state.logSource && sources.length > 0) {
+      state.logSource = sources[0].key;
+    }
+    const query = new URLSearchParams({
+      project: state.logProject,
+      kind,
+      lines: "1200",
+    });
+    if (state.logSource) query.set("source", state.logSource);
+
+    const data = await api("/api/log?" + query.toString());
+    if (data.source && data.source !== state.logSource) {
+      state.logSource = data.source;
+      renderLogSourceTabs();
+    }
+
+    // 原文缓存下来，关键字/级别过滤只在本地重排，不再打接口。
+    state.logContent = data.content || "";
+    state.logLabel = data.label || "";
+    renderLogView(scrollBottom);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function hideLog() {
+  $("log-panel").classList.add("hidden");
+  state.logProject = null;
+  state.logSource = null;
+  if (state.logTimer) {
+    clearInterval(state.logTimer);
+    state.logTimer = null;
+  }
+}
+
+// ---------------------------------------------------------------
+// “代码”弹窗：查看分支/改动/提交，并执行拉取、暂存、安装依赖。
+// 本地经常有未提交改动，所以拉取由 devctl 先 stash、拉完再 pop。
+// ---------------------------------------------------------------
+
+function openGit(project) {
+  state.gitProject = project;
+  // 切换项目时回到“当前分支 + 最近 20 条”，避免沿用上一个项目选中的远程分支。
+  state.gitRef = "";
+  state.gitLimit = 20;
+  $("git-panel").classList.remove("hidden");
+  $("git-title").textContent = "代码 · " + project;
+  $("git-status").className = "git-status";
+  $("git-status").textContent = "正在读取 git 状态…";
+  $("git-ref").innerHTML = "";
+  $("git-ref-note").textContent = "";
+  $("git-files").innerHTML = "";
+  $("git-commits").innerHTML = "";
+  $("git-more").classList.add("hidden");
+  $("git-stashes").innerHTML = "";
+  $("git-stash-wrap").classList.add("hidden");
+  $("git-conflicts").innerHTML = "";
+  $("git-conflict-count").textContent = "0";
+  $("git-conflict-wrap").classList.add("hidden");
+  state.conflictPicks = {};
+  state.stashRestored = {};
+  $("git-work").classList.add("hidden");
+  $("git-actions").innerHTML = "";
+  loadGit();
+}
+
+function hideGit() {
+  $("git-panel").classList.add("hidden");
+  state.gitProject = null;
+}
+
+// ---------------------------------------------------------------
+// 提交明细弹窗：点某条提交后，看作者/时间/说明/改动文件/具体 diff。
+// ---------------------------------------------------------------
+
+function openCommit(hash) {
+  if (!state.gitProject || !hash) return;
+  state.commitHash = hash;
+  state.commitData = null;
+  $("commit-panel").classList.remove("hidden");
+  $("commit-title").textContent = "提交明细 · " + state.gitProject;
+  $("commit-hash").textContent = hash;
+  $("commit-meta").className = "git-status";
+  $("commit-meta").textContent = "正在读取提交信息…";
+  $("commit-message").classList.add("hidden");
+  $("commit-files-title").textContent = "改动文件";
+  $("commit-files").innerHTML = "";
+  $("commit-hint").textContent = "";
+  $("commit-only-changed").checked = false;
+  $("commit-diffs").innerHTML = "";
+  $("commit-diffs").scrollTop = 0;
+  loadCommit(hash);
+}
+
+function hideCommit() {
+  $("commit-panel").classList.add("hidden");
+  state.commitHash = null;
+}
+
+// diff 按行上色：+ 绿、- 红、@@ 蓝、diff/index 等头部黄。
+// 用 textContent 拼 span，避免把 diff 里的 < > 当 HTML 渲染。
+// 状态码 -> [展示文案, 样式]。R100/C100 这类只取首字母。
+function diffStatusInfo(status) {
+  const code = (status || "").charAt(0);
+  const map = {
+    A: ["新增", "add"], M: ["修改", ""], D: ["删除", "del"],
+    R: ["重命名", "new"], C: ["复制", "new"], T: ["类型变更", ""],
+  };
+  return map[code] || [gitCodeLabel(code), ""];
+}
+
+// 单行 diff：左侧旧/新行号，右侧代码；新增/删除用底色，长行不折行。
+function diffRowHtml(row, onlyChanged) {
+  if (onlyChanged && row.type === "ctx") return "";
+  let sign = " ";
+  if (row.type === "add") sign = "+";
+  else if (row.type === "del") sign = "-";
+  else if (row.type === "hunk" || row.type === "meta") sign = "";
+  const oldNo = row.old == null ? "" : row.old;
+  const newNo = row.new == null ? "" : row.new;
+  return `<div class="diff-row ${row.type}">`
+    + `<span class="ln old">${oldNo}</span>`
+    + `<span class="ln new">${newNo}</span>`
+    + `<span class="dtext">${escapeHtml(sign + row.text)}</span>`
+    + `</div>`;
+}
+
+// 按文件渲染 diff；每个文件有独立表头、+/- 统计和 VS Code 对比入口。
+function renderCommitBody() {
+  const data = state.commitData;
+  const box = $("commit-diffs");
+  if (!data || !data.ok) {
+    box.innerHTML = `<div class="diff-empty">${escapeHtml((data && data.error) || "没有可显示的改动")}</div>`;
+    return;
+  }
+
+  const onlyChanged = $("commit-only-changed").checked;
+  const diffs = data.diffs || [];
+  if (!diffs.length) {
+    box.innerHTML = `<div class="diff-empty">${data.is_merge
+      ? "这是合并提交，git show 默认不展开两侧差异；需要逐文件对比时，点上方清单里的 VS Code 对比。"
+      : "没有文本改动，可能只是权限/模式变化。"}</div>`;
+    return;
+  }
+
+  box.innerHTML = diffs.map((diff) => {
+    const [label, cls] = diffStatusInfo(diff.status);
+    const path = diff.old_path && diff.old_path !== diff.path
+      ? `${diff.old_path} → ${diff.path}`
+      : diff.path;
+    let body;
+    if (diff.binary) {
+      body = '<div class="diff-empty">二进制文件，无法显示文本 diff</div>';
+    } else if (!diff.lines || !diff.lines.length) {
+      body = '<div class="diff-empty">这个文件只有模式/权限变化，没有代码改动</div>';
+    } else {
+      body = diff.lines.map((row) => diffRowHtml(row, onlyChanged)).join("");
+    }
+    const vscode = diff.binary
+      ? ""
+      : `<button class="diff-vscode" data-path="${escapeHtml(diff.path)}">VS Code 对比</button>`;
+    return `
+      <div class="diff-file" data-path="${escapeHtml(diff.path)}">
+        <div class="diff-file-head">
+          <span class="diff-status ${cls}">${escapeHtml(label)}</span>
+          <span class="diff-path" title="${escapeHtml(path)}">${escapeHtml(path)}</span>
+          <span class="diff-stat"><span class="add">+${diff.additions || 0}</span> <span class="del">−${diff.deletions || 0}</span></span>
+          ${vscode}
+        </div>
+        <div class="diff-body">${body}</div>
+      </div>`;
+  }).join("");
+
+  box.querySelectorAll(".diff-vscode").forEach((btn) => {
+    btn.addEventListener("click", () => openDiffInVSCode(btn.dataset.path));
+  });
+}
+
+// 点上方文件清单：滚到对应文件的 diff 并闪一下，避免在长 diff 里找不到。
+function scrollToDiff(path) {
+  const block = [...document.querySelectorAll("#commit-diffs .diff-file")]
+    .find((el) => el.dataset.path === path);
+  if (!block) return;
+  block.scrollIntoView({ block: "center", behavior: "smooth" });
+  block.classList.add("flash");
+  setTimeout(() => block.classList.remove("flash"), 1500);
+}
+
+// 用 VS Code 并排看这个文件在提交前后的版本，适合长文件或需要跳转定位的场景。
+async function openDiffInVSCode(filePath) {
+  const data = state.commitData;
+  if (!data || !state.gitProject) return;
+  toast("正在用 VS Code 打开对比…");
+  try {
+    const res = await api("/api/git/open-diff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project: state.gitProject, hash: data.hash, file: filePath }),
+    });
+    if (!res.ok) toast(res.error || "打开失败", true);
+    else toast("已在 VS Code 打开对比");
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// 复制完整命令，方便在终端里继续查这段提交。
+async function copyCommitCommand() {
+  const data = state.commitData;
+  const project = state.projects.find((item) => item.name === state.gitProject);
+  if (!data || !project) return;
+  const cmd = `git -C "${project.dir}" show ${data.hash}`;
+  try {
+    await navigator.clipboard.writeText(cmd);
+    toast("已复制：" + cmd);
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = cmd;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    toast("已复制命令");
+  }
+}
+
+function renderCommit(data) {
+  const meta = $("commit-meta");
+  const message = $("commit-message");
+
+  if (!data || !data.ok) {
+    state.commitData = null;
+    meta.className = "git-status bad";
+    meta.textContent = (data && data.error) || "读取提交失败";
+    $("commit-files").innerHTML = '<li class="git-empty">-</li>';
+    $("commit-hint").textContent = "";
+    $("commit-diffs").innerHTML = "";
+    return;
+  }
+
+  state.commitData = data;
+  $("commit-hash").textContent = data.short || data.hash;
+  meta.className = "git-status ok";
+  meta.textContent = `${data.author} <${data.email}> · ${data.date}`;
+
+  // 说明第一行已显示在 meta 里，这里展示完整说明（多行时更有价值）。
+  if (data.message && data.message.trim()) {
+    message.classList.remove("hidden");
+    message.textContent = data.message.trim();
+  } else {
+    message.classList.add("hidden");
+  }
+
+  const files = data.files || [];
+  $("commit-files-title").textContent = `改动文件（${files.length}）`;
+  $("commit-files").innerHTML = files.length
+    ? files.map((f) => {
+        const [label, cls] = diffStatusInfo(f.status);
+        const path = f.old_path && f.old_path !== f.path ? `${f.old_path} → ${f.path}` : f.path;
+        const stat = f.binary
+          ? '<span class="diff-stat">二进制</span>'
+          : `<span class="diff-stat"><span class="add">+${f.additions || 0}</span> <span class="del">−${f.deletions || 0}</span></span>`;
+        return `
+          <li class="clickable" data-path="${escapeHtml(f.path)}" title="跳到该文件的改动">
+            <span class="git-code ${cls}">${escapeHtml(label)}</span>
+            <span class="git-path" title="${escapeHtml(path)}">${escapeHtml(path)}</span>
+            ${stat}
+          </li>`;
+      }).join("")
+    : '<li class="git-empty">没有文件改动（可能是合并提交）</li>';
+
+  // 清单点击用事件绑定，避免把文件路径拼进 onclick 带来转义问题。
+  $("commit-files").querySelectorAll("li.clickable").forEach((li) => {
+    li.addEventListener("click", () => scrollToDiff(li.dataset.path));
+  });
+
+  $("commit-hint").textContent = data.truncated
+    ? "改动太大，后面部分未显示"
+    : `${(data.diffs || []).length} 个文件`;
+  renderCommitBody();
+}
+
+async function loadCommit(hash) {
+  const project = state.gitProject;
+  if (!project) return;
+  try {
+    const data = await api(`/api/git/commit?project=${encodeURIComponent(project)}&hash=${encodeURIComponent(hash)}`);
+    if (state.commitHash !== hash) return; // 期间点了别的提交，丢弃旧响应
+    renderCommit(data);
+  } catch (e) {
+    renderCommit({ ok: false, error: e.message });
+  }
+}
+
+// 改动状态码转成中文，便于直接看出是新增/修改/删除。
+function gitCodeLabel(code) {
+  const map = { "??": "新增", A: "新增", M: "修改", D: "删除", R: "重命名", C: "复制", U: "冲突" };
+  return map[code] || code;
+}
+
+function gitCodeClass(code) {
+  if (code === "??" || code.startsWith("A")) return "add";
+  if (code.startsWith("D")) return "del";
+  if (code === "??") return "new";
+  return "";
+}
+
+function renderGit(data) {
+  const bar = $("git-branch");
+  const status = $("git-status");
+  const actions = $("git-actions");
+
+  if (!data || !data.ok) {
+    bar.textContent = "-";
+    status.className = "git-status bad";
+    status.textContent = (data && data.error) || "读取 git 状态失败";
+    $("git-ref").innerHTML = "";
+    $("git-ref-note").textContent = "";
+    $("git-files").innerHTML = '<li class="git-empty">-</li>';
+    $("git-commits").innerHTML = '<li class="git-empty">-</li>';
+    $("git-more").classList.add("hidden");
+    $("git-conflict-wrap").classList.add("hidden");
+    actions.innerHTML = "";
+    return;
+  }
+
+  bar.textContent = data.branch || "-";
+
+  const bits = [];
+  if (data.upstream) bits.push(`跟踪 ${data.upstream}`);
+  if (data.ahead > 0) bits.push(`领先远端 ${data.ahead} 个提交`);
+  if (data.behind > 0) bits.push(`落后远端 ${data.behind} 个提交`);
+  if (data.dirty > 0) bits.push(`${data.dirty} 处未提交改动`);
+  if (data.untracked > 0) bits.push(`${data.untracked} 个未跟踪文件`);
+  // 有未合并路径时先提示冲突：这种状态下 git stash 会直接失败。
+  const unmerged = data.unmerged || 0;
+  if (unmerged > 0) bits.push(`${unmerged} 个文件有冲突`);
+  status.className = "git-status" + (data.behind > 0 || unmerged > 0 ? "" : " ok");
+  status.textContent = bits.length ? bits.join(" · ") : "工作区干净，已是最新";
+
+  // 分支选择：可以看本地分支、远程跟踪分支（origin/xxx）或全部分支的历史。
+  // 远程分支来自上一次 fetch/pull，点“获取远端”可刷新。
+  const branches = data.branches || [];
+  const locals = branches.filter((b) => b.kind === "local");
+  const remotes = branches.filter((b) => b.kind === "remote");
+  const option = (value, text) => (
+    `<option value="${escapeHtml(value)}">${escapeHtml(text)}</option>`
+  );
+  let options = [
+    option("", `当前分支（${data.branch || "HEAD"}）`),
+    option("__all__", "全部分支（本地 + 远程）"),
+  ];
+  if (locals.length) {
+    options.push(`<optgroup label="本地分支">${locals.map((b) => (
+      option(b.name, b.name + (b.current ? "（当前）" : ""))
+    )).join("")}</optgroup>`);
+  }
+  if (remotes.length) {
+    options.push(`<optgroup label="远程分支">${remotes.map((b) => (
+      option(b.name, b.name)
+    )).join("")}</optgroup>`);
+  }
+  const refSelect = $("git-ref");
+  refSelect.innerHTML = options.join("");
+  refSelect.value = data.ref || "";
+  // 选中的远程分支被 prune 掉后，下拉框会回到空值；此时按当前分支展示。
+  if (refSelect.value !== (data.ref || "")) refSelect.value = "";
+
+  const branchBits = `${locals.length} 个本地分支 · ${remotes.length} 个远程分支`;
+  if (data.ref === "__all__") {
+    $("git-ref-note").textContent = `正在看所有分支合并后的历史 · ${branchBits}`;
+  } else if (data.ref) {
+    $("git-ref-note").textContent = `正在只读查看 ${data.ref}；拉取/暂存仍作用于当前分支 ${data.branch || "-"}`;
+  } else {
+    $("git-ref-note").textContent = branchBits;
+  }
+
+  // 按钮：拉取会自动暂存本地改动；获取远端只更新远程分支列表，不改工作区。
+  const project = state.projects.find((item) => item.name === state.gitProject);
+  const installModules = (project && project.install) || "";
+  const stashes = data.stashes || [];
+  // 顶栏“恢复暂存”和列表里的“恢复”共用一套逻辑（apply，记录保留）：
+  // 以前这里走 git stash pop，点完记录就消失了，容易让人以为改动丢了。
+  const devctlStash = stashes.find((s) => (s.subject || "").includes("devctl-")) || stashes[0];
+  const restoreTitle = devctlStash
+    ? `把 ${devctlStash.ref} 的改动恢复到工作区；记录会保留，需要时再在下方删除`
+    : "把最近一条暂存恢复到工作区（记录保留）";
+  const buttons = [
+    `<button class="btn primary small" onclick="runGitAction('gitpull')">拉取代码</button>`,
+    `<button class="btn soft small" onclick="runGitAction('gitfetch')" title="git fetch --all --prune：刷新远程分支和远程提交，不改本地工作区">获取远端</button>`,
+    // 未合并状态下 git stash 会报 could not write index，所以先把按钮禁用并说明原因。
+    `<button class="btn soft small" onclick="runGitAction('gitstash')" ${data.dirty > 0 && !unmerged ? "" : "disabled"} title="${unmerged ? "先解决冲突再暂存" : "把本地改动存入 git stash"}">暂存改动</button>`,
+    `<button class="btn soft small" onclick="restoreLatestStash()" ${stashes.length && !unmerged ? "" : "disabled"} title="${escapeHtml(restoreTitle)}">恢复暂存</button>`,
+  ];
+  if (installModules) {
+    const installTitle = installModules.startsWith("@")
+      ? `${installModules.slice(1)} install：安装前端依赖`
+      : `mvn install：${installModules}`;
+    buttons.push(`<button class="btn soft small" onclick="runGitAction('install')" title="${escapeHtml(installTitle)}">安装依赖</button>`);
+  }
+  actions.innerHTML = buttons.join("");
+
+  $("git-files-title").textContent = `改动文件（${(data.files || []).length}）`;
+  $("git-files").innerHTML = (data.files || []).length
+    ? data.files.map((f) => `
+        <li>
+          <span class="git-code ${gitCodeClass(f.code)}">${escapeHtml(gitCodeLabel(f.code))}</span>
+          <span class="git-path" title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</span>
+        </li>`).join("")
+    : '<li class="git-empty">没有未提交改动</li>';
+
+  const commits = data.commits || [];
+  $("git-commits").innerHTML = commits.length
+    ? commits.map((c) => {
+      // %D 里的引用装饰：HEAD -> master, origin/master, tag: v1.0，取前 3 个显示。
+      const tags = (c.refs || "").split(",")
+        .map((item) => item.trim())
+        .filter((item) => item && !item.startsWith("HEAD ->") && !item.endsWith("/HEAD"))
+        .slice(0, 3);
+      return `
+        <li class="clickable" data-hash="${escapeHtml(c.hash)}" title="点击查看这次提交改了什么">
+          <span class="git-hash">${escapeHtml(c.hash)}</span>
+          <span class="git-author">${escapeHtml(c.author || "")}</span>
+          <span class="git-subject" title="${escapeHtml(c.subject)}">${escapeHtml(c.subject)}</span>
+          ${tags.map((tag) => `<span class="git-branch-tag" title="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join("")}
+          <span class="git-when">${escapeHtml(c.when)}</span>
+        </li>`;
+    }).join("")
+    : '<li class="git-empty">没有提交记录</li>';
+
+  const more = $("git-more");
+  if (data.has_more) {
+    more.classList.remove("hidden");
+    more.textContent = `加载更多（已显示 ${commits.length} / ${data.total}）`;
+  } else {
+    more.classList.add("hidden");
+  }
+
+  // 点提交看明细：谁提交的、改了哪些文件、具体哪几行。
+  $("git-commits").querySelectorAll("li.clickable").forEach((li) => {
+    li.addEventListener("click", () => openCommit(li.dataset.hash));
+  });
+
+  const stashWrap = $("git-stash-wrap");
+  state.gitStashes = data.stashes || [];
+  if ((data.stashes || []).length) {
+    stashWrap.classList.remove("hidden");
+    $("git-stashes").innerHTML = data.stashes.map((s) => {
+      // 刚在本次弹窗里点过“恢复”的记录：改动已经进工作区，只留删除按钮，避免再点一次“恢复”。
+      const restored = !!state.stashRestored[s.ref];
+      const badge = restored
+        ? '<span class="stash-badge ok" title="改动已经恢复到工作区">刚恢复</span>'
+        : s.blocked
+          ? '<span class="stash-badge" title="暂存动过的文件、工作区现在也改过，直接恢复会被 git 拒绝">恢复会被拒绝</span>'
+          : "";
+      const hint = restored
+        ? "改动已恢复到工作区。这条记录用完了，点“删除”只清掉记录，文件不会变。"
+        : s.blocked
+          ? "这条暂存的改动可能已经恢复到工作区（解冲突时保留了它那一侧），再恢复等于把同一份改动打第二次，所以 git 会拒绝。确认工作区内容无误后，点“删除”只清掉这条备份记录，文件不会变。"
+          : "";
+      return `
+      <li class="stash-item">
+        <span class="git-hash">${escapeHtml(s.ref)}</span>
+        <span class="git-subject" title="${escapeHtml(s.subject)}">${escapeHtml(s.subject)}</span>
+        ${badge}
+        <span class="stash-tools">
+          ${restored ? "" : `<button class="btn soft small" data-stash="${escapeHtml(s.ref)}" data-stash-action="apply">恢复</button>`}
+          <button class="btn soft small" data-stash="${escapeHtml(s.ref)}" data-stash-action="drop">删除</button>
+        </span>
+        ${hint ? `<span class="stash-hint">${hint}</span>` : ""}
+      </li>`;
+    }).join("");
+  } else {
+    stashWrap.classList.add("hidden");
+  }
+
+  // 有未合并路径才去读冲突明细；没有就直接收起面板，避免多余请求。
+  if (unmerged > 0) {
+    loadConflicts();
+  } else {
+    renderConflicts({ ok: true, conflicts: [] });
+  }
+}
+
+// 暂存记录的“恢复 / 删除”：恢复用 apply（不丢记录），删除只删记录不动工作区。
+// 用事件委托绑一次，因为列表每次刷新都会重建。
+function bindStashEvents() {
+  const list = $("git-stashes");
+  if (!list || list.dataset.bound === "1") return;
+  list.dataset.bound = "1";
+  list.addEventListener("click", async (event) => {
+    const btn = event.target.closest("button[data-stash-action]");
+    if (!btn) return;
+    const ref = btn.dataset.stash;
+    if (btn.dataset.stashAction === "apply") {
+      await applyStash(ref);
+      return;
+    }
+    if (!confirm(`删除 ${ref}？只删除这条暂存记录，工作区改动不受影响。`)) return;
+    const project = state.gitProject;
+    if (!project) return;
+    buttonsDisable("#git-stashes", true);
+    try {
+      const data = await api("/api/git/stash-drop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, ref }),
+      });
+      delete state.stashRestored[ref];
+      toast(data.message || "已删除暂存记录");
+    } catch (e) {
+      showStashError("删除暂存", e);
+    } finally {
+      buttonsDisable("#git-stashes", false);
+      loadGit();
+    }
+  });
+}
+
+// 顶栏“恢复暂存”：和记录里的“恢复”完全一样，只恢复改动、保留记录。
+// 以前这里调用 git stash pop，点完记录直接消失，看起来像改动丢了。
+async function restoreLatestStash() {
+  const stashes = state.gitStashes || [];
+  if (!stashes.length) {
+    toast("没有可恢复的暂存记录", true);
+    return;
+  }
+  // 优先恢复 devctl 打的标记，避免误动别人手动建的 stash。
+  const target = stashes.find((s) => (s.subject || "").includes("devctl-")) || stashes[0];
+  await applyStash(target.ref);
+}
+
+// 恢复一条暂存：apply 不删除记录，成功后把该条标成“刚恢复”，只留删除按钮。
+async function applyStash(ref) {
+  const project = state.gitProject;
+  if (!project) return;
+  buttonsDisable("#git-stashes", true);
+  buttonsDisable("#git-actions", true);
+  try {
+    const data = await api("/api/git/stash-apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project, ref }),
+    });
+    state.stashRestored[ref] = true;
+    toast(data.message || `已恢复 ${ref}，改动已在工作区`);
+    const work = $("git-work");
+    work.classList.remove("hidden");
+    work.textContent = `已恢复 ${ref}：改动写回工作区，记录保留（需要清理时点这条记录的“删除”）。`;
+  } catch (e) {
+    showStashError("恢复暂存", e);
+  } finally {
+    buttonsDisable("#git-stashes", false);
+    loadGit();
+  }
+}
+
+// 恢复/删除失败的统一提示：后端把“内容已在工作区”这类原因放在 hint 里。
+function showStashError(action, error) {
+  const hint = (error.data && error.data.hint) || "";
+  const work = $("git-work");
+  work.classList.remove("hidden");
+  work.textContent = `[${action}] 失败\n${error.message}` + (hint ? `\n提示：${hint}` : "");
+  toast(hint || error.message, true);
+}
+
+// 临时禁用某块里的按钮，避免重复点击。
+function buttonsDisable(selector, disabled) {
+  document.querySelectorAll(`${selector} button`).forEach((btn) => { btn.disabled = disabled; });
+}
+
+// ---------------------------------------------------------------
+// 冲突解决面板：列出未合并文件、逐块选择保留哪一侧，再标记已解决。
+// 索引里一旦有未合并路径，git stash/拉取都会失败，所以这里是“解卡”入口。
+// ---------------------------------------------------------------
+
+async function loadConflicts() {
+  const project = state.gitProject;
+  if (!project) return;
+  try {
+    const data = await api(`/api/git/conflicts?project=${encodeURIComponent(project)}`);
+    if (state.gitProject !== project) return; // 期间切换了项目，丢弃旧响应
+    renderConflicts(data);
+  } catch (e) {
+    renderConflicts({ ok: false, error: e.message });
+  }
+}
+
+function renderConflicts(data) {
+  const wrap = $("git-conflict-wrap");
+  const list = $("git-conflicts");
+  const files = (data && data.ok && data.conflicts) || [];
+  if (!files.length) {
+    wrap.classList.add("hidden");
+    list.innerHTML = "";
+    $("git-conflict-count").textContent = "0";
+    if (data && data.ok === false && data.error) {
+      wrap.classList.remove("hidden");
+      list.innerHTML = `<div class="conflict-file diff-hint">${escapeHtml(data.error)}</div>`;
+    }
+    return;
+  }
+  wrap.classList.remove("hidden");
+  $("git-conflict-count").textContent = String(files.length);
+  list.innerHTML = files.map(renderConflictFile).join("");
+}
+
+// 一个冲突文件：文件级“整文件选一侧”+ 每处冲突的两栏对比与选择按钮。
+function renderConflictFile(file) {
+  const picks = state.conflictPicks[file.path] || {};
+  const path = escapeHtml(file.path);
+  const hunks = file.hunks || [];
+  const pickedCount = hunks.filter((h) => picks[h.index]).length;
+  const allPicked = hunks.length > 0 && pickedCount === hunks.length;
+
+  const head = `
+    <div class="conflict-file-head">
+      <span class="git-code del">${escapeHtml(file.code || "UU")}</span>
+      <span class="git-path" title="${path}">${path}</span>
+      <span class="diff-hint">${escapeHtml(file.label || "冲突")} · ${file.hunk_count} 处</span>
+      <span class="conflict-tools">
+        <button class="btn soft small" data-role="side" data-path="${path}" data-side="ours"
+          title="整文件保留「${escapeHtml(file.ours_label || "当前分支")}」的内容">全部用当前</button>
+        <button class="btn soft small" data-role="side" data-path="${path}" data-side="theirs"
+          title="整文件保留「${escapeHtml(file.theirs_label || "冲突改动")}」的内容">全部用另一侧</button>
+      </span>
+    </div>`;
+
+  // 二进制/超大/没有冲突标记：只能整文件选一侧，逐块选择没有意义。
+  if (!file.editable) {
+    return `<div class="conflict-file">${head}
+      <div class="conflict-foot">
+        <span class="diff-hint">${escapeHtml(file.note || "该文件只能整文件选一侧")}</span>
+      </div>
+    </div>`;
+  }
+
+  const body = hunks.map((hunk) => {
+    const pick = picks[hunk.index] || "";
+    const oursPicked = pick === "ours" || pick === "both";
+    const theirsPicked = pick === "theirs" || pick === "both";
+    const label = pick === "both" ? "已选：两侧都保留"
+      : pick === "ours" ? "已选：当前分支"
+      : pick === "theirs" ? "已选：冲突改动"
+      : "未选择";
+    const side = (which, picked) => {
+      const lines = which === "ours" ? hunk.ours : hunk.theirs;
+      const total = which === "ours" ? hunk.ours_total : hunk.theirs_total;
+      const name = which === "ours" ? hunk.ours_label : hunk.theirs_label;
+      const more = total > lines.length
+        ? `<div class="diff-hint">仅显示前 ${lines.length} / ${total} 行</div>` : "";
+      return `
+        <div class="conflict-col ${which}${picked ? " picked" : ""}">
+          <div class="conflict-col-head">
+            <span class="conflict-label" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+            <button class="btn soft small" data-role="hunk" data-path="${path}"
+              data-hunk="${hunk.index}" data-side="${which}">${picked ? "已选" : "选这个"}</button>
+          </div>
+          <pre>${escapeHtml(lines.join("\n")) || '<span class="diff-hint">（空行）</span>'}</pre>
+          ${more}
+        </div>`;
+    };
+    return `
+      <div class="conflict-hunk">
+        <div class="conflict-hunk-head">
+          <span>第 ${hunk.index + 1} 处冲突 · 原文件第 ${hunk.line} 行</span>
+          <span class="conflict-pick diff-hint">${label}</span>
+          <button class="btn soft small" data-role="hunk" data-path="${path}"
+            data-hunk="${hunk.index}" data-side="both">两侧都保留</button>
+        </div>
+        <div class="conflict-cols">
+          ${side("ours", oursPicked)}
+          ${side("theirs", theirsPicked)}
+        </div>
+      </div>`;
+  }).join("");
+
+  return `<div class="conflict-file">${head}
+    ${body}
+    <div class="conflict-foot">
+      <span class="diff-hint">${allPicked ? "已选完，可以应用" : `还有 ${hunks.length - pickedCount} 处未选择`}</span>
+      <button class="btn primary small" data-role="apply" data-path="${path}"
+        ${allPicked ? "" : "disabled"}>应用并标记已解决</button>
+    </div>
+  </div>`;
+}
+
+// 冲突面板的点击都用事件委托，避免把文件路径拼进 onclick 造成转义问题。
+function bindConflictEvents() {
+  const list = $("git-conflicts");
+  if (!list || list.dataset.bound === "1") return;
+  list.dataset.bound = "1";
+  list.addEventListener("click", async (event) => {
+    const btn = event.target.closest("button[data-role]");
+    if (!btn) return;
+    const path = btn.dataset.path;
+    const role = btn.dataset.role;
+    if (!path) return;
+
+    // 逐块选择：只改本地状态，点“应用”时一次性交给后端重建文件。
+    if (role === "hunk") {
+      const picks = state.conflictPicks[path] || {};
+      picks[btn.dataset.hunk] = btn.dataset.side;
+      state.conflictPicks[path] = picks;
+      loadConflicts();
+      return;
+    }
+
+    if (role === "apply") {
+      const picks = state.conflictPicks[path] || {};
+      await resolveConflict({
+        project: state.gitProject,
+        mode: "hunks",
+        files: [{ path, picks }],
+      }, `正在解决 ${path} …`);
+      return;
+    }
+
+    if (role === "side") {
+      await resolveConflict({
+        project: state.gitProject,
+        mode: "side",
+        path,
+        side: btn.dataset.side,
+      }, `正在用整文件方式解决 ${path} …`);
+    }
+  });
+}
+
+// 调用后端解决冲突：成功后刷新 git 状态，让改动列表/冲突数立刻变化。
+async function resolveConflict(payload, hint) {
+  const work = $("git-work");
+  work.classList.remove("hidden");
+  work.textContent = hint;
+  const buttons = [...document.querySelectorAll("#git-conflicts button")];
+  buttons.forEach((btn) => { btn.disabled = true; });
+  try {
+    const data = await api("/api/git/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const lines = [];
+    if ((data.resolved || []).length) lines.push(`已解决：${data.resolved.join("、")}`);
+    if ((data.errors || []).length) lines.push(...data.errors.map((e) => `失败：${e}`));
+    if (!data.count) lines.push("冲突已全部解决，可以继续暂存/拉取");
+    work.textContent = lines.join("\n") || "已处理";
+    delete state.conflictPicks[payload.path || ""];
+    if (payload.files) payload.files.forEach((f) => { delete state.conflictPicks[f.path]; });
+    loadGit();
+  } catch (e) {
+    work.textContent = `解决失败：${e.message}`;
+    buttons.forEach((btn) => { btn.disabled = false; });
+    loadConflicts();
+  }
+}
+
+// 切换查看的分支/引用：重置分页，重新拉取历史。
+function changeGitRef(ref) {
+  state.gitRef = ref || "";
+  state.gitLimit = 20;
+  loadGit();
+}
+
+// “加载更多”：每次多取 30 条，仍然由后端算好行号/装饰。
+function loadMoreCommits() {
+  state.gitLimit += 30;
+  loadGit();
+}
+
+async function loadGit(scroll = false) {
+  const project = state.gitProject;
+  if (!project) return;
+  try {
+    const params = new URLSearchParams({
+      project,
+      ref: state.gitRef || "",
+      limit: String(state.gitLimit || 20),
+    });
+    const data = await api("/api/git?" + params.toString());
+    if (state.gitProject !== project) return; // 期间切换了项目，丢弃旧响应
+    renderGit(data);
+    if (scroll) $("git-commits").scrollTop = 0;
+  } catch (e) {
+    renderGit({ ok: false, error: e.message });
+  }
+}
+
+// 执行拉取/暂存/安装：走后台任务，输出实时显示在弹窗下方；
+// 结束后自动刷新 git 信息，让改动列表和分支状态立即更新。
+async function runGitAction(action) {
+  const project = state.gitProject;
+  if (!project) return;
+
+  const work = $("git-work");
+  work.classList.remove("hidden");
+  work.textContent = `[${labelAction(action)}] 正在执行…`;
+
+  // 执行期间禁用按钮，避免重复点击触发“已有任务在执行”。
+  const buttons = [...document.querySelectorAll("#git-actions button")];
+  buttons.forEach((btn) => { btn.disabled = true; });
+
+  const startedAt = Date.now();
+  try {
+    const data = await api("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, target: project }),
+      // 后端正常会立即返回 202；加超时避免接口异常时页面无限等待。
+      signal: (typeof AbortSignal !== "undefined" && AbortSignal.timeout)
+        ? AbortSignal.timeout(20000)
+        : undefined,
+    });
+    if (!data.job_id) {
+      work.textContent = data.message || "操作完成";
+      loadGit();
+      return;
+    }
+
+    // 复用更新任务接口轮询；每秒拉一次，并在末尾显示已等待时间。
+    const jobId = data.job_id;
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const job = await api("/api/job?id=" + encodeURIComponent(jobId));
+      if (state.gitProject !== project) return;
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      work.textContent = (job.output || "(暂无输出)") + `\n\n[已等待 ${elapsed}s · ${job.status}]`;
+      work.scrollTop = work.scrollHeight;
+      if (job.status !== "running") {
+        toast(`${labelAction(action)} ${project} ` + (job.status === "done" ? "完成" : "失败"), job.status !== "done");
+        break;
+      }
+      // 兜底：超过 10 分钟还没结束就停止轮询，避免页面一直转。
+      if (elapsed > 600) {
+        toast("任务仍在后台执行，可关闭弹窗稍后刷新查看", true);
+        break;
+      }
+    }
+  } catch (e) {
+    work.textContent = e.message;
+    toast(e.message, true);
+  } finally {
+    buttons.forEach((btn) => { btn.disabled = false; });
+  }
+  loadGit();
+  loadStatus();
+}
+
+// ---------------------------------------------------------------
+// 添加项目：选目录 -> 检测 -> 填名称/端口 -> 写入 projects.conf。
+// 后端会按目录重新检测并生成启动脚本，前端只负责展示和收集用户选择。
+// ---------------------------------------------------------------
+
+function openAddProject() {
+  state.addType = "backend";
+  state.addData = null;
+  $("add-dir").value = "";
+  $("add-name").value = "";
+  $("add-port").value = "";
+  $("add-core").checked = false;
+  $("add-doc").value = "";
+  $("add-detect").textContent = "先选择目录，然后点“检测”。";
+  $("add-preview").textContent = "";
+  $("add-error").classList.add("hidden");
+  $("add-error").textContent = "";
+  $("add-submit").disabled = false;
+  $("add-submit").textContent = "添加";
+  setAddType("backend");
+  $("add-panel").classList.remove("hidden");
+  $("add-dir").focus();
+}
+
+function hideAddProject() {
+  $("add-panel").classList.add("hidden");
+  state.addData = null;
+}
+
+function setAddType(type) {
+  state.addType = type;
+  $("add-type-backend").className = "btn small " + (type === "backend" ? "primary" : "soft");
+  $("add-type-frontend").className = "btn small " + (type === "frontend" ? "primary" : "soft");
+  $("add-frontend-fields").classList.toggle("hidden", type !== "frontend");
+  $("add-type-hint").textContent = type === "backend"
+    ? "需要 pom.xml；自动扫描 *-api 模块和 application.yml 端口"
+    : "需要 package.json；自动识别包管理器、框架、脚本和端口";
+  state.addData = null;
+  $("add-detect").textContent = $("add-dir").value.trim()
+    ? "已切换类型，点“检测”重新识别"
+    : "先选择目录，然后点“检测”。";
+  $("add-preview").textContent = "";
+  // 切换类型后端口含义变了（8080 vs 5173），重新检测时让后端给默认值。
+  $("add-port").value = "";
+  $("add-doc").value = "";
+  if ($("add-dir").value.trim()) inspectProjectDir();
+}
+
+async function pickProjectDir() {
+  toast("请在弹出的窗口中选择目录…");
+  try {
+    const data = await api("/api/project/pick-dir");
+    if (!data.ok) return; // 用户取消
+    $("add-dir").value = data.dir;
+    inspectProjectDir();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function inspectProjectDir() {
+  const dir = $("add-dir").value.trim();
+  if (!dir) {
+    toast("请先填写项目目录", true);
+    return;
+  }
+  $("add-detect").textContent = "正在检测目录…";
+  $("add-submit").disabled = true;
+  $("add-error").classList.add("hidden");
+  try {
+    const params = new URLSearchParams({ dir, type: state.addType });
+    const data = await api("/api/project/inspect?" + params.toString());
+    if (!data.ok) {
+      state.addData = null;
+      $("add-detect").innerHTML = `<span class="warn">${escapeHtml(data.error || "检测失败")}</span>`;
+      $("add-submit").disabled = true;
+      return;
+    }
+    renderAddInspect(data);
+  } catch (e) {
+    $("add-detect").innerHTML = `<span class="warn">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function renderAddInspect(data) {
+  state.addData = data;
+  state.localHost = data.local_host || state.localHost;
+  if (!$("add-name").value.trim()) $("add-name").value = data.name_suggestion;
+  $("add-port").value = data.port;
+  if (!$("add-doc").value.trim()) {
+    // 默认文档地址用后端下发的主机名（默认 localhost），不要再写死 127.0.0.1。
+    const host = state.localHost || "localhost";
+    $("add-doc").value = data.type === "frontend"
+      ? `http://${host}:${data.port}/`
+      : `http://${host}:${data.port}/doc.html`;
+  }
+
+  const lines = [];
+  if (data.type === "backend") {
+    const info = data.backend || {};
+    const modules = info.modules || [];
+    lines.push(`类型：后端 Maven 项目`);
+    lines.push(`端口：${data.port}（来自 application.yml 或默认 8080）`);
+    lines.push(`api 模块：${modules.length ? escapeHtml(modules.join(", ")) : "未发现（安装依赖时会跳过）"}`);
+  } else {
+    const info = data.frontend || {};
+    lines.push(`类型：前端项目 · ${escapeHtml(info.framework_label || info.framework || "通用")}`);
+    lines.push(`包管理器：${escapeHtml(info.package_manager || "npm")} · 端口：${data.port}`);
+    fillFrontendSelects(info);
+  }
+  lines.push(`Git 仓库：${data.is_git ? "是" : "否"}`);
+  (data.warnings || []).forEach((warning) => {
+    lines.push(`<span class="warn">${escapeHtml(warning)}</span>`);
+  });
+  $("add-detect").innerHTML = lines.join("<br>");
+  $("add-submit").disabled = false;
+  updateAddPreview();
+}
+
+function fillFrontendSelects(info) {
+  const pm = info.package_manager || "npm";
+  $("add-pm").value = pm;
+  const scripts = info.scripts || [];
+  $("add-dev-script").innerHTML = scripts.length
+    ? scripts.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")
+    : '<option value="">（没有脚本）</option>';
+  $("add-dev-script").value = info.dev_script || scripts[0] || "";
+  $("add-build-script").innerHTML = '<option value="">（不配置构建）</option>'
+    + scripts.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+  $("add-build-script").value = info.build_script || "";
+}
+
+function updateAddPreview() {
+  const dir = $("add-dir").value.trim();
+  const port = $("add-port").value.trim();
+  if (!dir || !port) {
+    $("add-preview").textContent = "";
+    return;
+  }
+  if (state.addType === "backend") {
+    $("add-preview").textContent =
+      `启动：java -jar <自动查找 *-server/target/*.jar> --spring.profiles.active=local\n`
+      + `端口：SERVER_PORT=${port}\n`
+      + `构建：mvn -B -Dmaven.test.skip=true clean package`;
+    return;
+  }
+  const info = (state.addData && state.addData.frontend) || {};
+  const pm = $("add-pm").value || info.package_manager || "npm";
+  const dev = $("add-dev-script").value || info.dev_script || "dev";
+  const build = $("add-build-script").value || "";
+  const flags = { vite: "--port", svelte: "--port", next: "-p", nuxt: "--port", umi: "--port", "vue-cli": "--port", angular: "--port" };
+  const flag = flags[info.framework] || "";
+  const start = `${pm} run ${dev}${flag ? ` -- ${flag} ${port}` : ""}`;
+  $("add-preview").textContent =
+    `启动：cd ${dir} && PORT=${port} ${start}\n`
+    + `构建：${build ? `${pm} run ${build}` : "（不配置构建，更新时只拉代码）"}\n`
+    + `依赖：${pm} install`;
+}
+
+async function submitAddProject() {
+  const dir = $("add-dir").value.trim();
+  const name = $("add-name").value.trim();
+  const port = Number($("add-port").value);
+  if (!dir) return toast("请先选择项目目录", true);
+  if (!name) return toast("请填写项目名", true);
+  if (!port) return toast("请填写端口", true);
+
+  const body = {
+    type: state.addType,
+    dir,
+    name,
+    port,
+    core: $("add-core").checked,
+    doc: $("add-doc").value.trim(),
+  };
+  if (state.addType === "frontend") {
+    body.package_manager = $("add-pm").value;
+    body.dev_script = $("add-dev-script").value;
+    body.build_script = $("add-build-script").value;
+  }
+
+  const submit = $("add-submit");
+  submit.disabled = true;
+  submit.textContent = "添加中…";
+  $("add-error").classList.add("hidden");
+  try {
+    const data = await api("/api/project/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    toast(`已添加 ${data.name}（${data.type === "frontend" ? "前端" : "后端"}，端口 ${data.port}）`);
+    hideAddProject();
+    await loadStatus(true);
+  } catch (e) {
+    $("add-error").textContent = e.message;
+    $("add-error").classList.remove("hidden");
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "添加";
+  }
+}
+
+// ---------------------------------------------------------------
+// 修改端口：点卡片上的 :端口 打开，保存后写入 ports.conf。
+// 运行中的项目不会立刻换端口，保存后询问是否重启。
+// ---------------------------------------------------------------
+
+function openPortModal(name) {
+  const project = state.projects.find((item) => item.name === name);
+  if (!project) return;
+  state.portProject = name;
+  $("port-title").textContent = "修改端口 · " + name;
+  $("port-current").textContent = "当前 :" + project.port;
+  $("port-input").value = project.port;
+  $("port-hint").textContent = project.running
+    ? "项目正在运行：保存后需要重启才会使用新端口"
+    : "保存后启动即使用新端口";
+  clearPortError();
+  $("port-panel").classList.remove("hidden");
+  $("port-input").focus();
+  $("port-input").select();
+}
+
+function hidePortModal() {
+  $("port-panel").classList.add("hidden");
+  state.portProject = null;
+}
+
+function clearPortError() {
+  $("port-error").textContent = "";
+  $("port-error").classList.add("hidden");
+}
+
+function showPortError(message) {
+  $("port-error").textContent = message;
+  $("port-error").classList.remove("hidden");
+}
+
+async function submitPort() {
+  const name = state.portProject;
+  if (!name) return;
+  const port = Number($("port-input").value);
+  if (!port) {
+    showPortError("请填写端口");
+    return;
+  }
+  if (port < 1 || port > 65535) {
+    showPortError("端口必须在 1-65535 之间");
+    return;
+  }
+
+  const submit = $("port-submit");
+  submit.disabled = true;
+  submit.textContent = "保存中…";
+  clearPortError();
+  try {
+    const data = await api("/api/project/port", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, port }),
+    });
+    hidePortModal();
+    // 先本地更新，避免状态轮询还没返回时卡片继续显示旧端口。
+    state.portOverride[name] = {
+      port: data.port,
+      oldPort: data.old_port,
+      until: Date.now() + 8000,
+    };
+    const project = state.projects.find((item) => item.name === name);
+    if (project) {
+      project.port = data.port;
+      project.doc = swapLocalPort(project.doc, data.port);
+      project.entries = (project.entries || []).map((entry) => ({
+        ...entry,
+        url: swapLocalPort(entry.url, data.port),
+      }));
+      renderProjects();
+    }
+    toast(`端口已改为 ${data.port}${data.running ? "，重启后生效" : ""}`);
+    await loadStatus(true);
+    if (data.running && confirm(`端口已保存为 ${data.port}。\n${name} 正在运行，是否现在重启？`)) {
+      runFastAction("restart", name);
+    }
+  } catch (e) {
+    showPortError(e.message);
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "保存";
+  }
+}
+
+// ---------------------------------------------------------------
+// 项目设置：添加之后仍可改名称、目录、类型、端口、文档和脚本。
+// 前端项目通过重新检测 package.json 来填 pm/dev/build 选项。
+// ---------------------------------------------------------------
+
+async function openSettings(name) {
+  const project = state.projects.find((item) => item.name === name);
+  if (!project) return;
+  state.settingsProject = name;
+  state.settingsData = null;
+
+  $("settings-title").textContent = "项目设置 · " + name;
+  $("settings-name").value = project.name;
+  $("settings-dir").value = project.dir || "";
+  $("settings-type").value = project.type || "backend";
+  $("settings-port").value = project.port;
+  $("settings-core").checked = !!project.core;
+  $("settings-doc").value = project.doc || "";
+  $("settings-install").value = project.install && !project.install.startsWith("@") ? project.install : "";
+  $("settings-start").value = project.start || "";
+  $("settings-stop").value = project.stop || "";
+  $("settings-build").value = project.build || "";
+  $("settings-error").classList.add("hidden");
+  $("settings-error").textContent = "";
+  $("settings-detect").textContent = "正在检测目录…";
+
+  // 健康检查字段：来自 /api/status 下发的 p.health（已合并 health.conf 的生效值）。
+  const health = project.health || {};
+  $("settings-health-mode").value = health.mode || "tcp";
+  $("settings-health-target").value = health.target || "";
+  $("settings-health-interval").value = Math.round(health.interval || 10);
+  $("settings-health-timeout").value = Math.round(health.timeout || 2);
+  $("settings-health-failures").value = Math.round(health.failures || 3);
+  $("settings-health-restart").checked = health.auto_restart !== false;
+  $("settings-health-max").value = Math.round(health.max_restarts != null ? health.max_restarts : 5);
+  $("settings-health-info").textContent = "";
+  // 检测是异步的；先按已知配置填好前端脚本，避免用户在检测完成前保存时丢构建配置。
+  if ((project.type || "backend") === "frontend") prefillSettingsFrontend(project);
+  toggleSettingsTypeFields();
+  $("settings-panel").classList.remove("hidden");
+  setSettingsBusy(true);
+  await refreshSettingsDetect(project);
+  setSettingsBusy(false);
+}
+
+// 检测期间禁用保存，避免没拿到脚本列表就提交。
+function setSettingsBusy(busy) {
+  const submit = $("settings-submit");
+  if (!submit) return;
+  submit.disabled = busy;
+  submit.textContent = busy ? "检测中…" : "保存设置";
+}
+
+// 用控制台已有状态先把前端设置填上（包管理器、已有构建脚本），不依赖目录检测。
+function prefillSettingsFrontend(project) {
+  const pm = project.install && project.install.startsWith("@") ? project.install.slice(1) : "npm";
+  $("settings-pm").value = pm;
+  $("settings-dev-script").innerHTML = '<option value="">（检测中）</option>';
+  $("settings-build-script").innerHTML = (project.build ? '<option value="__keep__">保持现有构建脚本</option>' : "")
+    + '<option value="">（不配置构建）</option>';
+  $("settings-build-script").value = project.build ? "__keep__" : "";
+}
+
+function hideSettings() {
+  $("settings-panel").classList.add("hidden");
+  state.settingsProject = null;
+  state.settingsData = null;
+}
+
+// 保存健康检查配置：单独一个接口，避免和 projects.conf 的保存混在一起。
+async function saveHealthSettings() {
+  const name = state.settingsProject;
+  if (!name) return;
+  const payload = {
+    project: name,
+    mode: $("settings-health-mode").value,
+    target: $("settings-health-target").value.trim(),
+    interval: Number($("settings-health-interval").value || 10),
+    timeout: Number($("settings-health-timeout").value || 2),
+    failures: Number($("settings-health-failures").value || 3),
+    auto_restart: $("settings-health-restart").checked,
+    max_restarts: Number($("settings-health-max").value || 0),
+  };
+  const info = $("settings-health-info");
+  info.textContent = "保存中…";
+  try {
+    const data = await api("/api/health", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    info.textContent = data.message || "已保存";
+    toast(`${name} 健康检查配置已更新`);
+    loadStatus(true);
+  } catch (e) {
+    info.textContent = "";
+    toast(e.message, true);
+  }
+}
+
+// ---------------------------------------------------------------
+// 端口面板：列出监听端口、对应项目，并支持一键释放。
+// ---------------------------------------------------------------
+function openPorts() {
+  $("ports-panel").classList.remove("hidden");
+  loadPorts();
+  if (state.portsTimer) clearInterval(state.portsTimer);
+  // 打开期间 5 秒刷新一次，关掉就停，避免后台空转。
+  state.portsTimer = setInterval(() => {
+    if (!$("ports-panel").classList.contains("hidden")) loadPorts();
+  }, 5000);
+}
+
+function hidePorts() {
+  $("ports-panel").classList.add("hidden");
+  if (state.portsTimer) {
+    clearInterval(state.portsTimer);
+    state.portsTimer = null;
+  }
+}
+
+async function loadPorts() {
+  const body = $("ports-body");
+  if (!body) return;
+  const onlyManaged = $("ports-only-managed").checked;
+  try {
+    const data = await api("/api/ports?all=" + (onlyManaged ? "0" : "1"));
+    state.portsData = data;
+    renderPorts(data);
+  } catch (e) {
+    body.innerHTML = `<div class="ports-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderPorts(data) {
+  const body = $("ports-body");
+  const all = (data && data.listening) || [];
+  const silentAll = (data && data.silent) || [];
+  const keyword = ($("ports-search") ? $("ports-search").value : "").trim().toLowerCase();
+  const match = (item) => !keyword
+    || String(item.port).includes(keyword)
+    || String(item.process || "").toLowerCase().includes(keyword)
+    || String(item.project || "").toLowerCase().includes(keyword);
+  const items = all.filter(match);
+  const silent = silentAll.filter(match);
+  const count = $("ports-count");
+  if (count) count.textContent = `${all.length} 个监听`;
+
+  if (!items.length && !silent.length) {
+    body.innerHTML = '<div class="ports-empty">没有读到监听端口。</div>';
+    return;
+  }
+
+  const rows = items.map((item) => {
+    const managed = item.managed;
+    const action = item.pid
+      ? `<button class="btn danger small" onclick="releasePort(${item.port}, ${item.pid})">释放</button>`
+      : '<span class="ports-hint">无权限</span>';
+    return `
+      <tr class="${managed ? "is-managed" : ""}">
+        <td><span class="port-tag">${item.port}</span></td>
+        <td class="mono">${escapeHtml(item.process || "-")}</td>
+        <td class="mono">${item.pid || "-"}</td>
+        <td>${managed ? escapeHtml(item.project) : '<span class="ports-hint">非登记项目</span>'}</td>
+        <td>${action}</td>
+      </tr>`;
+  }).join("");
+
+  // 登记了但没在监听：说明该起来没起来，单独标出来比混在列表里更有用。
+  const silentRows = silent.map((item) => `
+    <tr>
+      <td><span class="port-tag">${item.port}</span></td>
+      <td colspan="2" class="ports-hint">未监听</td>
+      <td>${escapeHtml(item.project)}</td>
+      <td><button class="btn soft small" onclick="runFastAction('start','${escapeHtml(item.project)}')">启动</button></td>
+    </tr>`).join("");
+
+  body.innerHTML = `
+    <table class="ports-table">
+      <thead><tr><th>端口</th><th>进程</th><th>PID</th><th>项目</th><th>操作</th></tr></thead>
+      <tbody>${rows}${silentRows}</tbody>
+    </table>
+    ${silent.length ? `<div class="ports-hint" style="margin-top:8px">${silent.length} 个登记项目当前没有监听（表格末尾）。</div>` : ""}
+  `;
+}
+
+async function releasePort(port, pid) {
+  const managed = (state.portsData && state.portsData.listening || []).find((item) => item.port === port);
+  const hint = managed && managed.managed
+    ? `这是登记项目「${managed.project}」的端口。`
+    : "这不是 projects.conf 里登记的项目，可能属于系统或别的软件。";
+  if (!confirm(`确定释放端口 ${port}？\n${hint}\n会终止 PID ${pid} 及其子进程，确定吗？`)) return;
+  try {
+    const data = await api("/api/ports/kill", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ port, pid }),
+    });
+    toast(data.message || "已释放");
+    loadPorts();
+    loadStatus(true);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function toggleSettingsTypeFields() {
+  const type = $("settings-type").value;
+  $("settings-backend-fields").classList.toggle("hidden", type !== "backend");
+  $("settings-frontend-fields").classList.toggle("hidden", type !== "frontend");
+}
+
+// 重新检测目录：前端填脚本下拉框，后端提示 Maven/api 模块。
+async function refreshSettingsDetect(project) {
+  const dir = $("settings-dir").value.trim();
+  const type = $("settings-type").value;
+  toggleSettingsTypeFields();
+  if (!dir) {
+    $("settings-detect").textContent = "先填写项目目录";
+    return;
+  }
+  $("settings-detect").textContent = "检测中…";
+  try {
+    const params = new URLSearchParams({ dir, type });
+    const data = await api("/api/project/inspect?" + params.toString());
+    if (!data.ok) {
+      state.settingsData = null;
+      $("settings-detect").textContent = data.error || "检测失败";
+      return;
+    }
+    state.settingsData = data;
+    if (type === "frontend") {
+      const info = data.frontend || {};
+      fillSettingsFrontend(info, project);
+      // 包管理器可能被项目现有配置覆盖，标签跟着下拉框走，避免显示不一致。
+      $("settings-detect").textContent = `${info.framework_label || info.framework || "前端"} · ${$("settings-pm").value}`;
+    } else {
+      const info = data.backend || {};
+      $("settings-detect").textContent = `Maven · ${(info.modules || []).length} 个 api 模块`;
+      if (!$("settings-install").value.trim()) $("settings-install").value = info.install || "";
+    }
+  } catch (e) {
+    $("settings-detect").textContent = e.message;
+  }
+}
+
+function fillSettingsFrontend(info, project) {
+  const scripts = info.scripts || [];
+  const pm = project && project.install && project.install.startsWith("@")
+    ? project.install.slice(1)
+    : info.package_manager || "npm";
+  $("settings-pm").value = pm;
+  $("settings-dev-script").innerHTML = scripts.length
+    ? scripts.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")
+    : '<option value="">（没有脚本）</option>';
+  $("settings-dev-script").value = info.dev_script || scripts[0] || "";
+  // 已有构建脚本时给一个“保持现有”，避免只改端口就把构建配置清空。
+  const keepOption = project && project.build
+    ? '<option value="__keep__">保持现有构建脚本</option>'
+    : "";
+  $("settings-build-script").innerHTML = keepOption
+    + '<option value="">（不配置构建）</option>'
+    + scripts.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+  $("settings-build-script").value = keepOption ? "__keep__" : (info.build_script || "");
+}
+
+function showSettingsError(message) {
+  $("settings-error").textContent = message;
+  $("settings-error").classList.remove("hidden");
+}
+
+async function submitSettings() {
+  const oldName = state.settingsProject;
+  if (!oldName) return;
+  const name = $("settings-name").value.trim();
+  const dir = $("settings-dir").value.trim();
+  const type = $("settings-type").value;
+  const port = Number($("settings-port").value);
+  if (!name) return showSettingsError("请填写项目名");
+  if (!dir) return showSettingsError("请填写项目目录");
+  if (!port) return showSettingsError("请填写端口");
+
+  const body = {
+    name: oldName,
+    new_name: name,
+    dir,
+    type,
+    port,
+    core: $("settings-core").checked,
+    doc: $("settings-doc").value.trim(),
+  };
+  if (type === "frontend") {
+    body.package_manager = $("settings-pm").value;
+    body.dev_script = $("settings-dev-script").value;
+    // “保持现有”不传 build_script，后端会保留原来的构建脚本。
+    const buildChoice = $("settings-build-script").value;
+    if (buildChoice !== "__keep__") body.build_script = buildChoice;
+  } else {
+    body.install = $("settings-install").value.trim();
+    body.start = $("settings-start").value.trim();
+    body.stop = $("settings-stop").value.trim();
+    body.build = $("settings-build").value.trim();
+  }
+
+  const submit = $("settings-submit");
+  submit.disabled = true;
+  submit.textContent = "保存中…";
+  $("settings-error").classList.add("hidden");
+  try {
+    const data = await api("/api/project/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    hideSettings();
+    if (data.renamed) {
+      delete state.flipped[data.old_name];
+      delete state.portOverride[data.old_name];
+      if (state.gitProject === data.old_name) state.gitProject = data.name;
+    }
+    if (data.port !== data.old_port) {
+      state.portOverride[data.name] = {
+        port: data.port,
+        oldPort: data.old_port,
+        until: Date.now() + 8000,
+      };
+    }
+    toast(`已保存 ${data.name} 的设置`);
+    await loadStatus(true);
+    if (data.running && confirm(`${data.name} 正在运行，是否重启使新设置生效？`)) {
+      runFastAction("restart", data.name);
+    }
+  } catch (e) {
+    showSettingsError(e.message);
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "保存设置";
+  }
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!$("settings-panel").classList.contains("hidden")) {
+    hideSettings();
+  } else if (!$("port-panel").classList.contains("hidden")) {
+    hidePortModal();
+  } else if (!$("add-panel").classList.contains("hidden")) {
+    hideAddProject();
+  } else if (!$("commit-panel").classList.contains("hidden")) {
+    hideCommit();
+  } else if (!$("git-panel").classList.contains("hidden")) {
+    hideGit();
+  } else if (!$("log-panel").classList.contains("hidden")) {
+    hideLog();
+  }
+});
+
+
+let toastTimer = null;
+function toast(message, isError = false) {
+  const el = $("toast");
+  el.textContent = message;
+  el.className = "toast show" + (isError ? " error" : "");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = "toast"; }, 3500);
+}
+
+async function shutdownPanel() {
+  if (!confirm("关闭控制台后，已启动的服务不会被停止。确认关闭？")) return;
+  try {
+    await api("/api/shutdown", { method: "POST" });
+    document.body.innerHTML = '<div class="bye">控制台已关闭，可以关闭此页面。</div>';
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// 冲突面板的按钮用事件委托绑定一次；面板内容是每次渲染重建的，不能在上面直接绑 onclick。
+bindConflictEvents();
+bindStashEvents();
+loadStatus();
+setInterval(loadStatus, 3000);
+</script>
+</body>
+</html>

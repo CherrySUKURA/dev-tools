@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven 设置示例：复制为 maven-settings.xml 后替换为你的内网仓库地址。
+  Maven 3.8+ 默认拦截外部 HTTP 仓库（maven-default-http-blocker），
+  这里显式把内网仓库映射到同地址并关闭 blocked，允许拉取内网快照。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+  <mirrors>
+    <mirror>
+      <id>internal-maven-http</id>
+      <name>Internal Nexus (HTTP allowed)</name>
+      <url>http://maven.example.internal:8081/repository/maven-public/</url>
+      <mirrorOf>internal-maven</mirrorOf>
+      <blocked>false</blocked>
+    </mirror>
+  </mirrors>
+</settings>

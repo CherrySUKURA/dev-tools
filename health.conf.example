@@ -1,0 +1,10 @@
+# 健康检查配置示例：复制为 health.conf。
+# 项目名|方式(tcp/http/off)|目标(端口或URL)|间隔秒|超时秒|连续失败次数|自动重启(1/0)|最大重启次数
+#
+# 未在此出现的项目使用默认值：TCP 探活自身端口、间隔 10 秒、超时 2 秒、
+# 连续 3 次失败判异常、开启自动重启、最多 5 次。
+#
+# HTTP 探活适合有 actuator 的 Spring Boot 服务：
+# svc-order|http|http://localhost:18083/actuator/health|15|3|3|1|5
+svc-order|tcp|18083|10|2|3|1|5
+txlccwweb|off|||10|2|3|0|0

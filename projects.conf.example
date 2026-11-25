@@ -1,0 +1,18 @@
+# 项目注册表示例：复制为 projects.conf 后按本机路径修改。
+# 列：项目名|目录|核心(1/0)|jar相对路径|start脚本|stop脚本|build脚本|文档地址|install模块|类型|分组|依赖项目|必需外部依赖
+#
+# 后四列可省略；省略时类型按 backend、分组按类型推导、无项目依赖、无外部依赖要求。
+# 目录必须是绝对路径；jar 留空时自动查找 *-server/target/*.jar 或 target/*.jar。
+
+# 1) 标准 Spring Boot 服务：只填名字、路径、是否核心、install 模块
+svc-auth|/Users/you/java/svc/svc-auth|1||||||svc-auth-module/svc-auth-api|backend|core||mysql-test,redis-test
+svc-order|/Users/you/java/svc/svc-order|0||||||svc-order-module/svc-order-api|backend|business||mysql-test,redis-test
+
+# 2) 网关：依赖核心服务先就绪
+txlc-gateway|/Users/you/java/txlc-gateway|1|||||||backend|core|svc-auth,svc-baseinfo|
+
+# 3) 传统 WAR + 独立 Tomcat：用 services/ 下的脚本启动/停止/构建
+txlcbase|/Users/you/java/txlcbase|0||/Users/you/java/dev-tools/services/txlcbase-start.sh|/Users/you/java/dev-tools/services/txlcbase-stop.sh|/Users/you/java/dev-tools/services/txlcbase-build.sh|http://127.0.0.1:8081/||backend|portal||mysql-test,redis-test
+
+# 4) 前端项目：install 列写 @npm/@pnpm/@yarn/@bun
+txlccwweb|/Users/you/project/txlccwweb|0||/Users/you/java/dev-tools/services/txlccwweb-start.sh||/Users/you/java/dev-tools/services/txlccwweb-build.sh|http://localhost:8082/|@npm|frontend|frontend||

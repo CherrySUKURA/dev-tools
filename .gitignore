@@ -1,0 +1,23 @@
+# 运行产物与本地状态
+tmp/
+batch/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+
+# macOS 应用包（本地生成，不进仓库）
+服务控制台.app/
+
+# 真实配置不进公共仓库：含本机绝对路径与内网地址。
+# 首次使用请从同名 .example 复制，例如 cp projects.conf.example projects.conf
+projects.conf
+ports.conf
+entries.conf
+health.conf
+deps.conf
+maven-settings.xml
+services/
+
+# 与本项目无关的本地技能目录
+txlcButtonLayout/

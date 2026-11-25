@@ -1,0 +1,11 @@
+# 外部依赖登记表示例：复制为 deps.conf。
+# 名称|类型(tcp/http)|地址|端口|说明
+#
+# 用途：本地 Java 服务通常不自带数据库和缓存，MySQL / Redis 在内网机器上。
+# 控制台会提前探活，在启动项目之前就提示「哪个依赖不通」，避免等 Spring 启动几分钟后报超时。
+# 项目与依赖的关联写在 projects.conf 第 13 列（requires）。
+#
+# 地址使用文档专用网段 192.0.2.0/24（TEST-NET-1），请替换为你的实际地址。
+mysql-test|tcp|192.0.2.10|3306|测试库（MySQL 8）
+redis-test|tcp|192.0.2.10|6379|共享缓存（Redis）
+nacos-test|http|192.0.2.10|8848|注册中心（local profile 通常关闭）

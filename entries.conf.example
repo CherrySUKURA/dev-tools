@@ -1,0 +1,6 @@
+# 页面入口示例：复制为 entries.conf。
+# 同一项目可配置多个入口，控制台按顺序展示为卡片背面的按钮。
+# 项目名|按钮名称|入口地址|说明（可省略）
+txlcsystem|门户首页|/efarm/entry/index|子平台对外门户首页
+txlcsystem|监管端|/efarm/sys/login|教育局/监管端登录
+txlcsystem|供应商|/efarm/supplier/login|供应商登录
