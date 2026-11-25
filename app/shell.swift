@@ -2,7 +2,7 @@
 //
 // 作用：把 dashboard.py 提供的本地页面装进 WKWebView，双击 .app 得到的是
 // 一个真正的应用窗口，而不是浏览器标签页。页面、配置和执行逻辑仍由
-// dashboard.py / devctl.sh 负责，所以 App 入口和网页入口看到的是同一份数据，
+// dashboard.py / devctl.py 负责，所以 App 入口和网页入口看到的是同一份数据，
 // 也都能做配置（添加项目、端口、依赖、设置）。
 //
 // 依赖：仅系统自带的 Cocoa + WebKit，不需要 pip 安装任何东西。

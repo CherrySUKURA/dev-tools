@@ -4,7 +4,7 @@
 
 **两个入口，同一份配置**：双击 `服务控制台.app` 得到原生窗口（日常管理用）；浏览器打开 `http://localhost:18000` 得到网页版（多屏、远程调试用）。两边读写同一份 `projects.conf` / `ports.conf` / `deps.conf`，配置在哪个入口做都一样。
 
-> 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）与 S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）已完成，S2.5 原生窗口外壳、S2.6 诊断日志已完成。详见 [ROADMAP.md](./ROADMAP.md)。
+> 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）、S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）、S2.5 原生窗口外壳、S2.6 诊断日志、S3（Python 核心 + Windows 执行路径）已完成。详见 [ROADMAP.md](./ROADMAP.md)。
 >
 > 后续计划用 Go + Vue 3 重写为 `txlc-console`，本仓库是那次重写的**可运行规格书**——行为契约见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)。
 
@@ -17,6 +17,15 @@ cd ~/java/dev-tools
 python3 dashboard.py          # 启动服务（只用标准库）
 # 入口一：双击 服务控制台.app —— 原生窗口，不需要浏览器
 # 入口二：浏览器打开 http://localhost:18000 —— 网页版
+```
+
+Windows 上等价入口：
+
+```bat
+rem 双击 app\windows\launch.cmd：后台起服务，再用 Edge/Chrome 的应用窗口打开
+rem 命令行方式：
+devctl.cmd status all
+devctl.cmd start core
 ```
 
 `服务控制台.app` 会先确保服务在跑，再打开原生窗口；直接跑 `dashboard.py` 时只提供网页入口。
@@ -37,7 +46,7 @@ python3 dashboard.py          # 启动服务（只用标准库）
 | 依赖 | 用途 | 说明 |
 |---|---|---|
 | Python 3 | 控制台后端 | 只用标准库，无第三方包 |
-| bash | `devctl.sh` 核心 | macOS 自带 bash 3.2 即可 |
+| Python 3 | `devctl.py` 核心 | macOS / Windows 共用；`devctl.sh`、`devctl.cmd` 只是转发 |
 | JDK 17 | Java 服务 | 脚本按 `JAVA_HOME` 或常见安装位置查找 |
 | Maven | 构建 | 找不到时自动尝试 `~/dev-tools/apache-maven-*` |
 | Node + 包管理器 | 前端项目 | 按项目 install 列决定 npm/pnpm/yarn/bun |
@@ -88,9 +97,10 @@ App 菜单除了刷新，还提供：**在浏览器中打开（网页配置入�
 |---|---|
 | `dashboard.py` | HTTP 服务、任务队列、状态缓存、Git 面板、健康巡检、依赖探活、编排执行（约 3,300 行） |
 | `dashboard.html` | 单页前端，内联 CSS 与 JS（约 4,000 行） |
-| `devctl.sh` | 进程与构建的实际执行者：启动/停止/重启/更新/热更新/状态 JSON |
-| `console_platform.py` | 平台适配层：端口列表、进程树、终止、通知、打开浏览器、临时目录 |
-| `app/` | macOS 原生窗口外壳：`shell.swift`（WKWebView + 菜单）、`launcher.sh`（先起服务再开窗）、`build.sh`（swiftc 编译并签名） |
+| `devctl.py` | 进程与构建的实际执行者：启动/停止/重启/更新/热更新/状态 JSON |
+| `devctl.sh` / `devctl.cmd` | 兼容入口，只负责找 Python 并转发参数（macOS/Linux / Windows） |
+| `console_platform.py` | 平台适配层：端口列表、进程树、终止、通知、目录选择、应用窗口、状态目录 |
+| `app/` | macOS 原生窗口外壳：`shell.swift`（WKWebView + 菜单）、`launcher.sh`、`build.sh`；`app/windows/` 提供 Windows 启动器与 PyInstaller 打包脚本 |
 | `logs/` | 控制台自身日志 `console.log`（运行时生成，已 gitignore） |
 | `tests/test_diagnostics.py` | 诊断清单、id 白名单、512KB 截断、诊断包不含配置 |
 | `tests/` | 标准库 `unittest` 用例（健康检查、探活、端口释放、配置写入、依赖闸门、分组、拓扑排序） |
@@ -240,7 +250,7 @@ portal.example.internal
 
 ```bash
 tail -f logs/console.log                      # 控制台自身
-tail -f /tmp/txlc-dashboard.log               # 启动器 stdout（进程被系统杀掉时看这里）
+tail -f /tmp/txlc-dashboard.log               # 启动器 stdout（Windows 为 %TEMP%\txlc-dashboard.log）
 tail -f /tmp/svc-price.log                    # 某个服务的输出
 ```
 
@@ -256,19 +266,21 @@ tail -f /tmp/svc-price.log                    # 某个服务的输出
 | `/tmp/txlc-dashboard/jobs/` | 任务日志 `<job>.log` 与元数据 `<job>.json`（保留最近 20 个） |
 | `/tmp/<项目>.action.running`、`.action.exit` | 异步启停的进度标记与退出码 |
 | `/tmp/<项目>.action.log` | 启停操作的输出 |
-| `/tmp/<项目>.log` | 服务自身输出（由 `devctl.sh` 重定向） |
+| `/tmp/<项目>.log` | 服务自身输出（由 `devctl.py` 重定向） |
 | `<系统临时目录>/<项目>.health.log` | 自动重启记录 |
 
-> 这些路径是当前实现的弱点（重启机器即丢失、Windows 不适用），重构时应改为项目自己的 `state/` 目录。
+macOS / Linux 的状态目录是 `/tmp`（保持历史 pid/日志路径不变）；Windows 没有 `/tmp`，统一放在 `%TEMP%\txlc`。判断逻辑在 `console_platform.state_dir()`，控制台与 `devctl.py` 共用。
+
+> 这些路径仍是临时目录（重启机器即丢失），后续可改为项目自己的 `state/` 目录并落库。
 
 ---
 
 ## 已知限制
 
-- **仅 macOS**：`devctl.sh` 依赖 `lsof`、`pkill`、`osascript`；生成的服务脚本也是 bash。Windows 支持见 ROADMAP S3。
+- **Windows 未在真机验证**：执行路径、`devctl.cmd`、`%TEMP%\txlc` 状态目录、`.cmd` 前端脚本和 Edge/Chrome `--app` 窗口都已实现，但当前开发机是 macOS；`app/windows/build-exe.cmd` 的 PyInstaller 打包同样待 Windows 实测。
 - **前端是单文件**：CSS/JS 内联在 `dashboard.html`，无法单独测试、改动冲突概率高。
 - **无持久化**：任务历史与健康状态都在临时目录，控制台重启即丢。
-- **测试覆盖有限**：41 个用例覆盖健康检查、端口逻辑、依赖探活与闸门、分组展开、拓扑排序、诊断日志白名单与打包；Git 解析、路径推导、前端逻辑尚无测试。
+- **测试覆盖有限**：67 个用例覆盖健康检查、端口逻辑、依赖探活与闸门、分组展开、拓扑排序、诊断日志白名单与打包、devctl 配置/端口/jar/JSON、假项目启停与分平台前端脚本；Git 解析、前端交互逻辑尚无测试。
 - **版本号是文件 mtime**：`/api/status` 的 `version` 用于前端自动刷新，不是语义化版本。
 - **依赖探活只到端口**：`tcp` 只判断端口可连，不代表库/账号/权限可用；`http` 只发一次 GET。
 - **编排进度只在内存**：控制台重启后 `ordered` 丢失；项目自身状态仍靠临时目录与端口推断。

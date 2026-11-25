@@ -6,10 +6,10 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | `devctl.sh` 约 1130 行、`dashboard.py` 约 3300 行、`dashboard.html` 约 4700 行 |
+| 代码规模 | `devctl.py` 约 1230 行（含注释）、`dashboard.py` 约 4100 行、`dashboard.html` 约 5600 行 |
 | 已有能力 | 启停/重启/更新、热更新、日志、Git 弹窗（分支/拉取/stash/冲突解决/diff）、项目增删改、端口覆盖、页面入口、前端项目、异步任务、健康巡检、端口面板、外部依赖闸门、分组与依赖顺序、批量操作与搜索 |
-| 技术债 | 前端仍是单文件、状态仍在临时目录、配置仍是自定义竖线格式、`devctl.sh` 承担进程管理 |
-| 跨平台障碍 | 代码里仍有 macOS 专有调用：`lsof`、`open`、`osascript`、`pkill`、`/tmp/`、`.app`、bash 脚本；`services/` 下生成的启动/停止脚本也是 bash（平台差异已收进 `console_platform.py`，但 `devctl.sh` 尚未迁移） |
+| 技术债 | 前端仍是单文件、状态仍在临时目录、配置仍是自定义竖线格式、`dashboard.py` 仍偏大 |
+| 跨平台 | 进程/端口/通知/目录选择已收进 `console_platform.py`；核心迁到 `devctl.py`；Windows 有 `devctl.cmd` 与 `app/windows/launch.cmd`（未在真机验证） |
 
 结论：功能不算"薄"，薄在**运维闭环**（起得来但崩了没人管、没有中间件托管、没有分组和顺序）和**平台绑定**。
 
@@ -91,7 +91,7 @@
 | **P4** | P1 全部 | 交付、通知、队列 |
 | **S4** | P2 的 14、15 + P3 | 打包升级、可选增强 |
 
-每阶段结束都要满足：`devctl.sh json` 合法、`/api/status` 正常、既有按钮回归一遍、新增功能有对应验收命令。
+每阶段结束都要满足：`devctl.py json` 合法、`/api/status` 正常、既有按钮回归一遍、新增功能有对应验收命令。
 
 ## 6. 与 txlc-console（Go 版）的映射
 
@@ -201,6 +201,36 @@
 - **不重复实现查看器**：诊断面板复用项目日志的渲染函数（行数、过滤、高亮、报错统计同一份），项目类条目再提供跳转；否则同一文件两处输出会不一致（先前的 1200 / 800 与「服务输出 / 启动日志」命名分裂）。
 - **每文件 512KB 上限**：几十 MB 的服务日志仍能进包，但不会把包撑到几百 MB。
 
-### 下一步（S3）
+### S3 已完成（2026-11-25）
 
-P2 的 12、13：把 `devctl.sh` 的核心逻辑迁到 Python（`devctl.py`），并做 Windows 支持（含 Edge/Chrome `--app` 窗口入口）。目标：拿到 Windows 可用的版本，同时让 Go 重写的对照物从 bash 变成可测试的 Python。
+P2 的 12、13：核心逻辑从 bash 迁到 Python，并补齐 Windows 执行路径。
+
+| 交付 | 位置 | 验收方式 |
+|---|---|---|
+| Python 核心 | `devctl.py`：配置解析、目标解析、端口/jar 发现、start/stop/update/install、Git、watch、status/list/json/panel | 与旧 bash 版逐字段对比：`list` 完全相同；`json` 17 个项目、20 个字段、顺序与值全部相同 |
+| 兼容入口 | `devctl.sh`（37 行，只找 Python 并转发）、`devctl.cmd`（Windows） | `./devctl.sh list` / `devctl.cmd list` 输出与旧版一致 |
+| 异步动作标记 | `devctl.py _action <项目> <start|stop|restart>` | 控制台 FAB 动作改调它；写 `<状态目录>/<项目>.action.running` / `.action.exit`，不再依赖 bash wrapper |
+| 跨平台状态目录 | `console_platform.state_dir()`：macOS / Linux `/tmp`，Windows `%TEMP%\txlc` | 控制台与 devctl 共用；升级后旧 `/tmp` pid/日志仍能读 |
+| 平台进程能力 | `pid_alive` / `kill_pid` / `spawn_detached` / `script_suffix` / `pick_directory` / `open_app_window` | macOS 已自检通过；Windows 分支用 `tasklist` / `taskkill /T` / PowerShell |
+| 前端脚本分平台 | `dashboard.write_frontend_scripts()` | macOS/Linux 生成 `*.sh`；Windows 生成 `*.cmd`（`%PORT%`、`cd /d`） |
+| Windows 启动器 | `app/windows/launch.py` + `launch.cmd` | 后台起 `dashboard.py`，等 `/api/status` 就绪后用 Edge/Chrome `--app=` 开窗 |
+| Windows 打包 | `app/windows/build-exe.cmd`（PyInstaller `--onedir`） | 脚本已写，**待 Windows 真机验证**；`dashboard.py --devctl` 支持同 exe 分发 |
+| 单元测试 | `tests/test_devctl.py`（24 用例） | 配置解析、目标/顺序、端口两种分隔符、jar 发现、JSON 字段与类型、action 标记、源码扫描、假项目 start/stop 全流程 |
+
+设计取舍：
+
+- **bash 不保留第二份实现**：`devctl.sh` 只剩 37 行转发，避免以后修 bug 要改两处；旧脚本已完整对照验收后删除。
+- **JSON 的 `port` 必须是数字**：旧 bash 版输出数字，前端按数字比较端口；迁移时字符串端口导致「运行中」全部判错，已修正并用 17 个项目 diff 锁住。
+- **状态目录不跟着 `tempfile.gettempdir()` 走**：macOS 的 `gettempdir()` 是 `/var/folders/...`，直接切过去会让正在跑的服务变成「未运行」；POSIX 明确保持 `/tmp`。
+- **`_action` 而不是在每个前端动作里拼 shell**：标记文件、退出码、异常清理都在 Python 一个地方，Windows 上也不需要 `bash -c`。
+- **打包仍保留 `devctl.py` 作为规格书**：PyInstaller 用 `--hidden-import devctl` + `dashboard.py --devctl` 复用同一入口，源码模式与 exe 模式行为一致。
+- **Windows 先做到「能跑」而不是「装好」**：本轮交付 Python 执行路径与应用窗口；安装包、开机自启、单实例锁留给 P2 #14 / 后续。
+
+已知限制：
+
+- Windows 分支没有在真机跑过；`devctl.cmd`、`.cmd` 前端脚本、`%TEMP%` 状态目录、PyInstaller 打包都需要一台 Windows 机器做一次冒烟。
+- `services/` 里已有的旧 bash 脚本不会自动迁移；在 Windows 上新增项目时才会生成 `.cmd`。
+
+### 下一步（P4 / S4）
+
+P1 的交付闭环（配置导出导入、通知、任务队列可见化、Git 增强），以及 P2 的 14、15（三平台打包与升级、无人值守巡检）。

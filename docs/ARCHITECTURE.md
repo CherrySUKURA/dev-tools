@@ -24,13 +24,13 @@ dashboard.py（Python 标准库，无第三方依赖）
    └─ 平台层 console_platform.py
           │  subprocess
           ▼
-devctl.sh（bash 核心）
+devctl.py（Python 核心，devctl.sh / devctl.cmd 只做参数转发）
    ├─ start_one / stop_one / update_one / build_one
    ├─ watch：源码监听 + 自动重编译重启（常驻进程）
    └─ json_status：把所有项目状态输出为 JSON
           │
           ▼
-真实进程（java -jar / services/*.sh / npm dev），日志重定向到临时目录
+真实进程（java -jar / services/*.sh|*.cmd / npm dev），日志重定向到状态目录
 ```
 
 ---
@@ -39,14 +39,16 @@ devctl.sh（bash 核心）
 
 | 层 | 文件 | 只做这些事 |
 |---|---|---|
-| 外壳层（仅 macOS） | `app/shell.swift` + `app/launcher.sh` | 先确保本地服务在跑，再用 WKWebView 开原生窗口；菜单只做刷新、浏览器入口、打开配置/日志，不承载业务逻辑 |
+| 外壳层（macOS） | `app/shell.swift` + `app/launcher.sh` | 先确保本地服务在跑，再用 WKWebView 开原生窗口；菜单只做刷新、浏览器入口、打开配置/日志，不承载业务逻辑 |
+| 外壳层（Windows） | `app/windows/launch.py` + `launch.cmd` | 先确保本地服务在跑，再用 Edge/Chrome 的 `--app=` 打开无地址栏窗口；没有可用浏览器时退回默认浏览器 |
 | 表现层 | `dashboard.html` | 渲染卡片、分组、弹窗、轮询状态；搜索/过滤/高亮在本地完成，不再请求后端 |
 | HTTP / 编排层 | `dashboard.py` | 路由、参数校验、任务排队、状态聚合、健康巡检、依赖探活与闸门、拓扑排序与编排执行、Git 面板 |
-| 平台层 | `console_platform.py` | `listening_ports`、`pid_on_port`、`process_tree`、`kill_tree`、`port_open`、`open_url`、`notify`、`temp_dir`、`find_executable` |
-| 执行层 | `devctl.sh` | 进程的真实启停、Maven 构建、jar 查找、日志重定向、端口占用判定 |
+| 平台层 | `console_platform.py` | `listening_ports`、`pid_on_port`、`process_tree`、`kill_tree`、`pid_alive`、`spawn_detached`、`port_open`、`open_url`、`open_app_window`、`pick_directory`、`notify`、`state_dir`、`script_suffix`、`find_executable` |
+| 执行层 | `devctl.py` | 进程的真实启停、Maven 构建、jar 查找、日志重定向、端口占用判定 |
+| 兼容入口 | `devctl.sh` / `devctl.cmd` | 只负责找到 Python 并转发参数，不含业务逻辑 |
 | 配置 | `*.conf` | 项目、端口、入口、健康、外部依赖，全部为竖线分隔纯文本 |
 
-**判断新逻辑该放哪：** 需要跨平台或需要单测 → `dashboard.py` / `console_platform.py`；必须直接操作进程树或 bash 语义 → `devctl.sh`，并且尽量只做薄壳。
+**判断新逻辑该放哪：** 需要跨平台或需要单测 → `dashboard.py` / `console_platform.py`；必须直接操作进程树或构建命令 → `devctl.py`，并且不要新增只兼容单一平台的 shell。
 
 **两个入口的边界：** App 与网页最终都落在同一个 `dashboard.html` 和同一套 `/api/*`。任何配置都必须在页面里完成（App 不另做一套表单）；App 只额外提供文件级快捷方式（打开 `projects.conf`、配置目录、控制台日志）和「在浏览器中打开」。这样重写成 Go 版时，可以先用浏览器验证行为，再决定是否补外壳。
 
@@ -60,17 +62,17 @@ devctl.sh（bash 核心）
 |---|---|---|
 | `logs/console.log`（+ `.1`~`.3`） | 控制台进程日志：启动/退出、访问日志、异常堆栈；2MB × 3 轮转 | 持久，重启后仍可查 |
 | `logs/`（可用 `TXLC_LOG_DIR` 覆盖） | 目录本身进 `.gitignore`，不进仓库 | — |
-| `/tmp/<项目>.pid` | 启动后的主进程 PID | 重启机器即失效 |
-| `/tmp/<项目>.log` | 服务 stdout/stderr | 覆盖写 |
-| `/tmp/<项目>.action.running` | 正在执行的启停动作名 | 动作结束后删除 |
-| `/tmp/<项目>.action.exit` | 上次启停的退出码 + mtime | 保留，用于前端判定结束 |
-| `/tmp/<项目>.action.log` | 启停操作输出（与操作日志弹窗对应） | 追加 |
-| `/tmp/txlc-dashboard/jobs/*.log|*.json` | 任务输出与元数据，保留最近 20 个 | 控制台重启后仍可查历史 |
+| `<状态目录>/<项目>.pid` | 启动后的主进程 PID | 重启机器即失效 |
+| `<状态目录>/<项目>.log` | 服务 stdout/stderr | 覆盖写 |
+| `<状态目录>/<项目>.action.running` | 正在执行的启停动作名 | 动作结束后删除 |
+| `<状态目录>/<项目>.action.exit` | 上次启停的退出码 + mtime | 保留，用于前端判定结束 |
+| `<状态目录>/<项目>.action.log` | 启停操作输出（与操作日志弹窗对应） | 追加 |
+| `<状态目录>/txlc-dashboard/jobs/*.log|*.json` | 任务输出与元数据，保留最近 20 个 | 控制台重启后仍可查历史 |
 | `<系统临时目录>/<项目>.health.log` | 自动重启记录 | 追加 |
 | `health.conf` | 探活配置 | 持久 |
 | `deps.conf` | 外部依赖登记 | 持久 |
 
-> 这一层是**当前实现最弱的地方**：状态全在临时目录，重启即丢，且 Windows 无 `/tmp`。重写时应改成项目内的 `state/` 目录并落库。
+> 状态目录由 `console_platform.state_dir()` 决定：macOS / Linux 是 `/tmp`（保持历史路径，升级后旧 pid/日志仍可读），Windows 是 `%TEMP%\txlc`。这一层仍是临时目录（重启机器即丢），重写时应改成项目内的 `state/` 目录并落库。
 
 ---
 
@@ -81,11 +83,11 @@ devctl.sh（bash 核心）
 1. 前端 `POST /api/action`，body `{action: "start-bg", target: "svc-order"}` 或 `{action: "start-bg", names: [...]}`。
 2. `valid_target` 校验目标（只允许 `all` / `core` / `group:xx` / 真实项目名，防命令注入）；`expand_target` 展开成项目名列表。
 3. **依赖闸门**：单个项目且未 `force` 时先跑 `dependency_gate`，`requires` 里有不通的依赖就返回 `409 {can_force, down_deps}`，不进入启动。
-4. **单项目**：`start_fast` 写 `/tmp/svc-order.action.running`，清掉旧 `.action.exit`，然后 `subprocess.Popen` 一个 bash wrapper。
+4. **单项目**：`start_fast` 写 `<状态目录>/svc-order.action.running`，清掉旧 `.action.exit`，然后 `subprocess.Popen` 一个 `devctl.py _action svc-order start` 子进程。
    **多项目**：`start_ordered` 先 `topo_order`（依赖在前，停止时反序），再逐个项目重复「`start_fast` → `wait_project_state` 等端口就绪」，进度写入内存里的 `ordered_task`，由 `/api/status.ordered` 暴露。
-5. wrapper 调 `devctl.sh start svc-order`：
+5. `_action` 调 `devctl.py start svc-order`：
    - `pid_alive` / `port_listening` 先判重，已在运行则直接返回；
-   - 有自定义启动脚本（WAR / 前端）→ 用 `services/*.sh`，注入 `PORT` 与 `SERVER_PORT`；
+   - 有自定义启动脚本（WAR / 前端）→ 用 `services/*.sh`（Windows 为 `*.cmd`），注入 `PORT` 与 `SERVER_PORT`；
    - 否则找 jar，没有就先 `build_one`（Maven）；
    - 注入端口覆盖与「本机联调地址」（把部分服务间调用指回 `127.0.0.1`）；
    - `java -jar ... &`，写 pid 文件，轮询端口最多 90 秒。
@@ -105,11 +107,11 @@ devctl.sh（bash 核心）
 | 每请求一线程 | `ThreadingHTTPServer` |
 | 状态缓存 | 首个请求同步读 `devctl json`，之后立即返回缓存并后台刷新；同一时刻只允许一个刷新线程 |
 | 任务队列 | `active_job_id` 全局唯一，构建/更新/安装/Git 动作串行；第二个任务返回 409 |
-| 快速动作 | 启停/重启走 `FAST_ACTIONS`，每项目一个 wrapper，**不占任务队列**，因此可以与更新并行 |
+| 快速动作 | 启停/重启走 `FAST_ACTIONS`，每项目一个 `devctl.py _action` 子进程，**不占任务队列**，因此可以与更新并行 |
 | 健康巡检 | 独立 daemon 线程，2 秒调度一次；项目清单 5 秒刷新一次；每项目按自身间隔探活 |
 | 依赖巡检 | 独立 daemon 线程，每 15 秒探活一次 `deps.conf`；慢依赖不拖累服务探活 |
 | 编排任务 | 内存里唯一一个 `ordered_task`；多项目启停按拓扑序串行，进度由 `/api/status` 暴露，同一时刻只允许一个编排 |
-| 热更新 | `devctl.sh watch` 独立常驻进程，不占队列 |
+| 热更新 | `devctl.py watch` 独立常驻进程，不占队列 |
 | 锁 | `jobs_lock`、`status_cache_lock`、`git_cache_lock`、`health_lock`、`health_conf_lock`、`project_conf_lock`、`dep_lock`、`ordered_lock` |
 
 **已知竞态与防护：**

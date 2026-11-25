@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # TXLC 本地 Java 服务 Web 控制台后端。
-# 只监听 127.0.0.1，通过调用 devctl.sh 完成启动/停止/更新/热更新，
+# 只监听 127.0.0.1，通过调用 devctl.py 完成启动/停止/更新/热更新，
 # 前端通过轮询获取状态、任务输出和项目日志，不依赖终端窗口。
 #
 # 启动：/usr/bin/python3 dashboard.py
@@ -15,7 +15,6 @@ import os
 import re
 import shlex
 import shutil
-import signal
 import socket
 import subprocess
 import sys
@@ -33,15 +32,25 @@ from urllib.parse import parse_qs, urlparse
 # 平台差异（端口列表、进程树、通知、打开浏览器）统一走适配层，见 console_platform.py。
 import console_platform as plat
 
-BASE_DIR = Path(__file__).resolve().parent
-DEVCTL = BASE_DIR / "devctl.sh"
+# 源码运行时是脚本目录；PyInstaller 打包后配置和日志放在 exe 同级目录，
+# 这样升级、备份、查日志都能在安装目录里完成，不会丢到临时解包目录。
+BASE_DIR = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent
+)
+# 核心逻辑在 devctl.py；Windows 上不能直接执行 .py，必须显式用当前解释器启动。
+DEVCTL = BASE_DIR / "devctl.py"
+PYTHON = sys.executable
+# 运行状态目录：POSIX 是 /tmp（保持历史 pid/日志路径），Windows 是 %TEMP%\txlc。
+STATE_DIR = plat.state_dir()
 HTML_FILE = BASE_DIR / "dashboard.html"
 ENTRIES_CONF = BASE_DIR / "entries.conf"
 PROJECTS_CONF = BASE_DIR / "projects.conf"
 PORTS_CONF = BASE_DIR / "ports.conf"
 SERVICES_DIR = BASE_DIR / "services"
-JOB_DIR = Path("/tmp/txlc-dashboard/jobs")
-WATCH_DIR = Path("/tmp/txlc-dashboard/watch")
+JOB_DIR = STATE_DIR / "txlc-dashboard" / "jobs"
+WATCH_DIR = STATE_DIR / "txlc-dashboard" / "watch"
 # 控制台自身的日志目录：跟业务项目日志分开，重启后还能查；按大小轮转。
 # 业务日志仍在项目目录/临时目录，诊断面板会把它们汇总到一起。
 LOG_DIR = Path(os.environ.get("TXLC_LOG_DIR") or (BASE_DIR / "logs"))
@@ -199,20 +208,50 @@ def configure_logging():
 
 
 def run_devctl(args, timeout=20):
-    """同步调用 devctl.sh 并返回 (returncode, stdout, stderr)。"""
+    """同步调用 devctl.py 并返回 (returncode, stdout, stderr)。"""
     proc = subprocess.run(
-        [str(DEVCTL)] + args,
+        devctl_command(*args),
         cwd=str(BASE_DIR),
         capture_output=True,
         text=True,
+        # Windows 控制台默认编码可能是 GBK；统一按 UTF-8 解码，避免中文日志乱码。
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
+        env=devctl_env(),
     )
     return proc.returncode, proc.stdout, proc.stderr
 
 
+def detach_kwargs():
+    """让子进程脱离控制台：POSIX 用新会话，Windows 用新进程组。"""
+    if plat.IS_WINDOWS:
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+    return {"start_new_session": True}
+
+
+def devctl_env():
+    """给 devctl 子进程指定工具目录（打包后它自己的 __file__ 在解包目录里）。"""
+    env = dict(os.environ)
+    env["TXLC_TOOLS_DIR"] = str(BASE_DIR)
+    return env
+
+
+def devctl_command(*args):
+    """devctl 的启动命令。
+
+    源码模式：python devctl.py <args>；
+    PyInstaller 模式：同一个 exe 带 --devctl 再进来，由 main() 分发到 devctl，
+    避免依赖用户机器上是否还留着 devctl.py。
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--devctl"] + list(args)
+    return [PYTHON, str(DEVCTL)] + list(args)
+
+
 def app_version():
     """用控制台相关文件的修改时间生成版本号，前端检测到变化后自动刷新。"""
-    files = [HTML_FILE, ENTRIES_CONF, Path(__file__).resolve(), BASE_DIR / "devctl.sh",
+    files = [HTML_FILE, ENTRIES_CONF, Path(__file__).resolve(), DEVCTL,
              BASE_DIR / "console_platform.py", HEALTH_CONF]
     mtimes = []
     for path in files:
@@ -298,7 +337,7 @@ def service_log_sources(project):
             add("app", "应用日志", latest)
 
     # 启动输出始终保留，应用日志为空时也能看启动报错。
-    add("startup", "启动日志", project.get("log") or f"/tmp/{name}.log")
+    add("startup", "启动日志", project.get("log") or str(STATE_DIR / f"{name}.log"))
     return sources
 
 
@@ -306,7 +345,7 @@ def _read_git_status(path):
     """读取一个项目的分支、未提交改动数、领先/落后远端提交数。
 
     使用 porcelain=v2 的 --branch 输出，一次 git 调用拿全所需信息；
-    未跟踪文件不计入改动数，和 devctl.sh“有未提交改动就跳过 pull”的判定保持一致。
+    未跟踪文件不计入改动数，和 devctl.py“有未提交改动就跳过 pull”的判定保持一致。
     """
     if not path:
         return {"ok": False}
@@ -446,7 +485,7 @@ def attach_entries(projects):
             "service": service_log_sources(project),
             "action": [],
         }
-        action_log = Path(f"/tmp/{project.get('name')}.action.log")
+        action_log = STATE_DIR / f"{project.get('name')}.action.log"
         if action_log.exists():
             project["log_sources"]["action"].append({
                 "key": "action",
@@ -1209,7 +1248,7 @@ def open_diff_in_editor(project_dir, rev, file_path):
     if not code:
         return {"ok": False, "error": "没找到 VS Code，请先安装或把 code 命令加入 PATH"}
 
-    target_dir = Path("/tmp/txlc-dashboard/editor") / uuid.uuid4().hex[:12]
+    target_dir = STATE_DIR / "txlc-dashboard" / "editor" / uuid.uuid4().hex[:12]
     target_dir.mkdir(parents=True, exist_ok=True)
     base = Path(file_path).name or "file"
     old_file = target_dir / f"旧-{base}"
@@ -1221,7 +1260,7 @@ def open_diff_in_editor(project_dir, rev, file_path):
         subprocess.Popen(
             [code, "--diff", str(old_file), str(new_file)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True,
+            **detach_kwargs(),
         )
     except OSError as exc:
         return {"ok": False, "error": f"启动 VS Code 失败：{exc}"}
@@ -1617,19 +1656,11 @@ def inspect_project(raw_dir, want_type=""):
 
 
 def pick_project_dir():
-    """弹出 macOS 目录选择框；取消时返回 ok=false。"""
-    script = 'POSIX path of (choose folder with prompt "选择要添加的项目目录")'
-    try:
-        proc = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True, text=True, timeout=180,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return {"ok": False, "error": f"无法打开目录选择框：{exc}"}
-    if proc.returncode != 0:
-        return {"ok": False, "cancelled": True}
-    path = (proc.stdout or "").strip().rstrip("/")
-    if not path:
+    """弹出系统目录选择框；取消时返回 ok=false。"""
+    path, cancelled, error = plat.pick_directory("选择要添加的项目目录")
+    if error:
+        return {"ok": False, "error": f"无法打开目录选择框：{error}"}
+    if cancelled or not path:
         return {"ok": False, "cancelled": True}
     return {"ok": True, "dir": path}
 
@@ -1638,24 +1669,65 @@ def write_frontend_scripts(name, project_dir, package_manager, dev_script, build
     """生成前端启动/构建脚本，返回 (start_path, build_path)。
 
     脚本放到 dev-tools/services/，不往业务仓库写文件；projects.conf 用绝对路径引用。
+    平台不同后缀不同：macOS/Linux 是 .sh，Windows 是 .cmd。
     """
     SERVICES_DIR.mkdir(parents=True, exist_ok=True)
-    quoted_dir = shlex.quote(str(project_dir))
-    quoted_dev = shlex.quote(dev_script)
-    quoted_build = shlex.quote(build_script)
-
     flag = FRONTEND_PORT_FLAGS.get(framework, "")
     # 端口由 devctl 通过 PORT 环境变量传入，脚本里的数字只是兜底默认值。
     # 这样改端口不需要重写脚本，运行中的项目重启后就会用新端口。
-    extra = f' -- {flag} "$PORT"' if flag else ""
-    start_path = SERVICES_DIR / f"{name}-start.sh"
-    start_path.write_text(
-        "#!/bin/bash\n"
-        "# 由 TXLC 服务控制台生成：启动前端开发服务器。\n"
+    suffix = plat.script_suffix()
+    start_path = SERVICES_DIR / f"{name}-start{suffix}"
+    build_path = None
+    labels = (
         f"# 项目：{name}\n"
         f"# 目录：{project_dir}\n"
         f"# 框架：{FRONTEND_FRAMEWORK_LABELS.get(framework, framework)}，包管理器：{package_manager}\n"
-        "set -e\n"
+    )
+
+    if plat.IS_WINDOWS:
+        # .cmd 里 %PORT% 取环境变量；setlocal 保证变量不污染后续命令。
+        # 注意注释必须用 rem，# 开头的行会被 cmd 当成未知命令。
+        win_labels = (
+            f"rem 项目：{name}\r\n"
+            f"rem 目录：{project_dir}\r\n"
+            f"rem 框架：{FRONTEND_FRAMEWORK_LABELS.get(framework, framework)}，包管理器：{package_manager}\r\n"
+        )
+        extra = f" -- {flag} %PORT%" if flag else ""
+        start_path.write_text(
+            "@echo off\r\n"
+            "rem 由 TXLC 服务控制台生成：启动前端开发服务器。\r\n"
+            + win_labels
+            + "setlocal\r\n"
+            f'cd /d "{project_dir}"\r\n'
+            f'if not defined PORT set "PORT={port}"\r\n'
+            'set "BROWSER=none"\r\n'
+            f"{package_manager} run {dev_script}{extra}\r\n"
+            "exit /b %errorlevel%\r\n",
+            encoding="utf-8",
+        )
+        if build_script:
+            build_path = SERVICES_DIR / f"{name}-build{suffix}"
+            build_path.write_text(
+                "@echo off\r\n"
+                "rem 由 TXLC 服务控制台生成：构建前端项目。\r\n"
+                + win_labels
+                + "setlocal\r\n"
+                f'cd /d "{project_dir}"\r\n'
+                f"{package_manager} run {build_script}\r\n"
+                "exit /b %errorlevel%\r\n",
+                encoding="utf-8",
+            )
+        return start_path, build_path
+
+    quoted_dir = shlex.quote(str(project_dir))
+    quoted_dev = shlex.quote(dev_script)
+    quoted_build = shlex.quote(build_script)
+    extra = f' -- {flag} "$PORT"' if flag else ""
+    start_path.write_text(
+        "#!/bin/bash\n"
+        "# 由 TXLC 服务控制台生成：启动前端开发服务器。\n"
+        + labels
+        + "set -e\n"
         f"cd {quoted_dir}\n"
         f'export PORT="${{PORT:-{port}}}"\n'
         "export BROWSER=none\n"
@@ -1664,15 +1736,13 @@ def write_frontend_scripts(name, project_dir, package_manager, dev_script, build
     )
     start_path.chmod(0o755)
 
-    build_path = None
     if build_script:
         build_path = SERVICES_DIR / f"{name}-build.sh"
         build_path.write_text(
             "#!/bin/bash\n"
             "# 由 TXLC 服务控制台生成：构建前端项目。\n"
-            f"# 项目：{name}\n"
-            f"# 目录：{project_dir}\n"
-            "set -e\n"
+            + labels
+            + "set -e\n"
             f"cd {quoted_dir}\n"
             f"exec {package_manager} run {quoted_build}\n",
             encoding="utf-8",
@@ -1952,11 +2022,11 @@ def set_project_port(payload):
 
 def project_is_running(name):
     """判断项目是否还在运行：pid 文件存活或端口正在监听。"""
-    pid_path = Path(f"/tmp/{name}.pid")
+    pid_path = STATE_DIR / f"{name}.pid"
     if pid_path.is_file():
         try:
-            os.kill(int(pid_path.read_text().strip()), 0)
-            return True
+            if plat.pid_alive(int(pid_path.read_text().strip())):
+                return True
         except (ValueError, OSError):
             pass
     port = configured_ports().get(name)
@@ -2325,9 +2395,9 @@ def diagnostics_entries():
             continue
         # 标签与项目日志弹窗的来源名保持一致：启动日志 / 操作日志 / 应用日志 / 错误日志。
         _add_diag(entries, seen, "project", "启动日志",
-                  project.get("log") or f"/tmp/{name}.log", name, "startup", "service")
+                  project.get("log") or str(STATE_DIR / f"{name}.log"), name, "startup", "service")
         _add_diag(entries, seen, "project", "操作日志",
-                  f"/tmp/{name}.action.log", name, "action", "action")
+                  str(STATE_DIR / f"{name}.action.log"), name, "action", "action")
         _add_diag(entries, seen, "health", "健康巡检", health_log_path(name, "health"), name)
         for kind, sources in (project.get("log_sources") or {}).items():
             for source in sources:
@@ -2396,13 +2466,13 @@ def build_diagnostics_zip(entries):
 
 def watch_pid(target):
     """检查热更新监听进程是否存活。"""
-    path = Path("/tmp/dev-watch-all.pid") if target == "all" else Path(f"/tmp/{target}.watch.pid")
+    name = "dev-watch-all.pid" if target == "all" else f"{target}.watch.pid"
+    path = STATE_DIR / name
     if not path.exists():
         return None
     try:
         pid = int(path.read_text().strip())
-        os.kill(pid, 0)
-        return pid
+        return pid if plat.pid_alive(pid) else None
     except (ValueError, OSError):
         return None
 
@@ -2840,7 +2910,7 @@ def start_ordered(action, names, force=False):
 
 def _action_in_flight(name):
     """该项目是否有启动/停止/重启正在执行（有就先别插自动重启）。"""
-    marker = Path(f"/tmp/{name}.action.running")
+    marker = STATE_DIR / f"{name}.action.running"
     try:
         return marker.exists() and time.time() - marker.stat().st_mtime < 600
     except OSError:
@@ -3117,9 +3187,7 @@ def list_jobs(limit=20, known_names=None):
 
 
 def notify_job(job):
-    """更新任务结束时发 macOS 系统通知，后台更新不用一直盯着页面。"""
-    if sys.platform != "darwin":
-        return
+    """更新任务结束时发系统通知，后台更新不用一直盯着页面。"""
     label = {
         "update": "更新", "install": "安装依赖",
         "gitpull": "拉取", "gitstash": "暂存", "gitunstash": "恢复暂存",
@@ -3131,20 +3199,7 @@ def notify_job(job):
         message = f"{label} {job.get('target', '')} 失败，请查看更新日志"
     else:
         message = f"{label} {job.get('target', '')} 已停止"
-
-    # 通过 argv 传参，避免项目名里的引号破坏 AppleScript。
-    script = [
-        "osascript",
-        "-e", "on run argv",
-        "-e", 'display notification (item 1 of argv) with title (item 2 of argv) sound name "Glass"',
-        "-e", "end run",
-        message,
-        "服务控制台",
-    ]
-    try:
-        subprocess.run(script, capture_output=True, timeout=6)
-    except (OSError, subprocess.SubprocessError):
-        pass
+    plat.notify("服务控制台", message)
 
 
 def start_job(action, target, names=None):
@@ -3201,12 +3256,13 @@ def run_job(job):
                     out.write(f"[控制台] ({index}/{len(targets)}) {job['action']} {target}\n")
                     out.flush()
                 proc = subprocess.Popen(
-                    [str(DEVCTL), job["action"], target],
+                    devctl_command(job["action"], target),
                     cwd=str(BASE_DIR),
                     stdout=out,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    start_new_session=True,
+                    env=devctl_env(),
+                    **detach_kwargs(),
                 )
                 job["proc"] = proc
                 code = proc.wait()
@@ -3245,18 +3301,12 @@ def stop_job(job_id):
     if not proc or proc.poll() is not None:
         return True
 
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-    except OSError:
-        pass
+    plat.kill_tree(proc.pid, force=False)
 
     def force_kill():
         time.sleep(3)
         if proc.poll() is None:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except OSError:
-                pass
+            plat.kill_tree(proc.pid, force=True)
 
     threading.Thread(target=force_kill, daemon=True).start()
     return True
@@ -3273,16 +3323,16 @@ def target_project_names(target):
 
 
 def start_fast(action, target):
-    """异步启动/停止/重启：每个项目起一个 wrapper，接口立即返回。
+    """异步启动/停止/重启：每个项目起一个 devctl 子进程，接口立即返回。
 
-    wrapper 会写 /tmp/<name>.action.running，结束后写 .action.exit，
+    devctl.py _action 会写 <状态目录>/<name>.action.running，结束后写 .action.exit，
     前端轮询 /api/status 即可知道进行到哪一步，不需要占用更新任务队列。
     """
     real = FAST_ACTIONS[action]
     names = target_project_names(target)
     started = []
     for name in names:
-        running_file = Path(f"/tmp/{name}.action.running")
+        running_file = STATE_DIR / f"{name}.action.running"
         if running_file.exists():
             try:
                 # 超过 10 分钟的标记视为残留；否则认为该项目已有操作在执行。
@@ -3293,35 +3343,23 @@ def start_fast(action, target):
                 continue
 
         # 父进程先写 running 标记并清掉旧退出码，避免前端看到上一次的结果。
-        exit_file = Path(f"/tmp/{name}.action.exit")
+        exit_file = STATE_DIR / f"{name}.action.exit"
         try:
             running_file.write_text(real, encoding="utf-8")
             exit_file.unlink(missing_ok=True)
         except OSError:
             continue
 
-        log_path = Path(f"/tmp/{name}.action.log")
-        wrapper = r'''
-name="$1"
-action="$2"
-running="/tmp/${name}.action.running"
-exitf="/tmp/${name}.action.exit"
-printf "%s" "$action" > "$running"
-rm -f "$exitf"
-"$0" "$action" "$name"
-rc=$?
-printf "%s" "$rc" > "$exitf"
-rm -f "$running"
-exit $rc
-'''
+        log_path = STATE_DIR / f"{name}.action.log"
         try:
             with open(log_path, "ab") as out:
                 subprocess.Popen(
-                    ["bash", "-c", wrapper, str(DEVCTL), name, real],
+                    devctl_command("_action", name, real),
                     cwd=str(BASE_DIR),
                     stdout=out,
                     stderr=subprocess.STDOUT,
-                    start_new_session=True,
+                    env=devctl_env(),
+                    **detach_kwargs(),
                 )
             started.append(name)
         except Exception:
@@ -3345,12 +3383,13 @@ def start_watch(target):
     log_path = WATCH_DIR / f"{target}.log"
     with open(log_path, "ab") as out:
         subprocess.Popen(
-            [str(DEVCTL), "watch", target],
+            devctl_command("watch", target),
             cwd=str(BASE_DIR),
             stdout=out,
             stderr=subprocess.STDOUT,
             text=True,
-            start_new_session=True,
+            env=devctl_env(),
+            **detach_kwargs(),
         )
 
     # 等监听进程真正写出 pid 文件，避免接口先返回成功、前端却一直等状态。
@@ -3700,7 +3739,7 @@ class Handler(BaseHTTPRequestHandler):
                     selected = sources[0]
 
                 if kind == "action":
-                    path = f"/tmp/{project_name}.action.log"
+                    path = str(STATE_DIR / f"{project_name}.action.log")
                     label = "操作日志"
                     source_key = "action"
                 elif selected:
@@ -3708,7 +3747,7 @@ class Handler(BaseHTTPRequestHandler):
                     label = selected["label"]
                     source_key = selected["key"]
                 else:
-                    path = (project or {}).get("log") or f"/tmp/{project_name}.log"
+                    path = (project or {}).get("log") or str(STATE_DIR / f"{project_name}.log")
                     label = "启动日志"
                     source_key = "startup"
 
@@ -3815,7 +3854,7 @@ class Handler(BaseHTTPRequestHandler):
                     payload = job_summary(job)
                     output_path = job["output"]
                 else:
-                    # 历史任务：从 /tmp/txlc-dashboard/jobs 的 sidecar 和日志恢复。
+                    # 历史任务：从状态目录下 txlc-dashboard/jobs 的 sidecar 和日志恢复。
                     meta = read_job_meta(job_id) or {}
                     log_path = JOB_DIR / f"{job_id}.log"
                     if not log_path.exists():
@@ -4052,6 +4091,10 @@ class Server(ThreadingHTTPServer):
 
 def main():
     global server_ref
+    # 打包后没有独立 python 解释器：同一个 exe 带 --devctl 时转发给 devctl.py。
+    if len(sys.argv) > 1 and sys.argv[1] == "--devctl":
+        import devctl
+        return devctl.main([sys.argv[0]] + sys.argv[2:])
     configure_logging()
     cleanup_old_jobs()
     # 健康巡检独立线程：不阻塞 HTTP 服务，控制台关掉后线程随进程退出。
@@ -4060,6 +4103,17 @@ def main():
     threading.Thread(target=deps_loop, daemon=True).start()
     server_ref = Server((HOST, PORT), Handler)
     print(f"TXLC 服务控制台已启动：http://{HOST}:{PORT}")
+
+    # PyInstaller 打包的 exe 双击后没有终端：服务起来后自动打开应用窗口，
+    # 行为和 macOS 的 .app 一致；源码模式由用户自己开浏览器，不抢焦点。
+    if getattr(sys, "frozen", False):
+        def open_window():
+            for _ in range(40):
+                if plat.port_open(PORT):
+                    plat.open_app_window(f"http://localhost:{PORT}/")
+                    return
+                time.sleep(0.5)
+        threading.Thread(target=open_window, daemon=True).start()
     try:
         server_ref.serve_forever()
     except KeyboardInterrupt:
