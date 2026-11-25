@@ -160,6 +160,24 @@
 - **等待用实时状态**：`wait_project_state` 每轮直读 `devctl json`，不复用 1 秒 SWR 缓存，避免「刚启动」被误判为已就绪。
 - **`ports.conf` 同时兼容空白与 `|`**：老文件是空白分隔，文档曾写成竖线，两种都接受，避免因分隔符失效。
 
+### S2.5 已完成（2026-11-25）
+
+| 交付 | 位置 | 验收方式 |
+|---|---|---|
+| 原生窗口外壳 | `app/shell.swift`（WKWebView + 原生菜单，无第三方依赖） | 双击 `服务控制台.app` 得到独立窗口，Dock 图标、`⌘Q` 退出、窗口位置记忆 |
+| 启动器 | `app/launcher.sh` | 服务没跑时先拉起（日志仍写临时目录），就绪后才开窗；找不到窗口二进制时退化为浏览器打开 |
+| 构建脚本 | `app/build.sh` | `swiftc` 单文件编译 + 组装 `.app` + ad-hoc 签名；`install.sh` 在有 swiftc 时调用 |
+| 双入口 | App 窗口 / 浏览器 `http://localhost:18000` | 同一份 `dashboard.html`、同一套 `/api/*`、同一批 conf 文件；配置在两边等价 |
+| App 菜单 | `shell.swift` | 重新加载 / 强制刷新 / 在浏览器中打开 / 打开 `projects.conf` / 打开配置目录 / 打开控制台日志 |
+
+设计取舍：
+
+- **App 不做第二套配置界面**：App、网页都渲染同一个页面，避免「App 里改了但网页看不到」的分叉；App 只补文件级快捷入口（conf、目录、日志）。
+- **页面内链接交给系统浏览器**：`target=_blank`（页面入口、接口文档）在 App 里跳到默认浏览器，避免出现没有地址栏、无法返回的子窗口。
+- **窗口跟随当前 Space**：`collectionBehavior = .moveToActiveSpace`，多显示器 / 多桌面下双击后窗口出现在当前桌面，而不是被记到上次的桌面。
+- **服务与应用解耦**：退出 App 不停止控制台、也不停止业务服务；这与网页入口「关掉标签页不等于关服务」的语义一致。
+- **Windows 外壳留到 S3**：Windows 上用 Edge/Chrome 的 `--app=` 模式即可得到无地址栏窗口，等 `devctl.py` 落地后再提供（当前 bash 执行层还不支持 Windows）。
+
 ### 下一步（S3）
 
-P2 的 12、13：把 `devctl.sh` 的核心逻辑迁到 Python（`devctl.py`），并做 Windows 支持。目标：拿到 Windows 可用的版本，同时让 Go 重写的对照物从 bash 变成可测试的 Python。
+P2 的 12、13：把 `devctl.sh` 的核心逻辑迁到 Python（`devctl.py`），并做 Windows 支持（含 Edge/Chrome `--app` 窗口入口）。目标：拿到 Windows 可用的版本，同时让 Go 重写的对照物从 bash 变成可测试的 Python。

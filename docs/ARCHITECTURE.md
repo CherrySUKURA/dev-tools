@@ -8,7 +8,9 @@
 ## 1. 全貌
 
 ```
-浏览器（dashboard.html 单页，内联 CSS/JS）
+入口一：服务控制台.app（app/shell.swift：WKWebView 原生窗口 + 菜单）
+入口二：浏览器（直接访问 http://localhost:18000）
+   │  同一个页面 dashboard.html（单页，内联 CSS/JS）
    │  HTTP/JSON，1 秒轮询 /api/status
    ▼
 dashboard.py（Python 标准库，无第三方依赖）
@@ -37,6 +39,7 @@ devctl.sh（bash 核心）
 
 | 层 | 文件 | 只做这些事 |
 |---|---|---|
+| 外壳层（仅 macOS） | `app/shell.swift` + `app/launcher.sh` | 先确保本地服务在跑，再用 WKWebView 开原生窗口；菜单只做刷新、浏览器入口、打开配置/日志，不承载业务逻辑 |
 | 表现层 | `dashboard.html` | 渲染卡片、分组、弹窗、轮询状态；搜索/过滤/高亮在本地完成，不再请求后端 |
 | HTTP / 编排层 | `dashboard.py` | 路由、参数校验、任务排队、状态聚合、健康巡检、依赖探活与闸门、拓扑排序与编排执行、Git 面板 |
 | 平台层 | `console_platform.py` | `listening_ports`、`pid_on_port`、`process_tree`、`kill_tree`、`port_open`、`open_url`、`notify`、`temp_dir`、`find_executable` |
@@ -44,6 +47,8 @@ devctl.sh（bash 核心）
 | 配置 | `*.conf` | 项目、端口、入口、健康、外部依赖，全部为竖线分隔纯文本 |
 
 **判断新逻辑该放哪：** 需要跨平台或需要单测 → `dashboard.py` / `console_platform.py`；必须直接操作进程树或 bash 语义 → `devctl.sh`，并且尽量只做薄壳。
+
+**两个入口的边界：** App 与网页最终都落在同一个 `dashboard.html` 和同一套 `/api/*`。任何配置都必须在页面里完成（App 不另做一套表单）；App 只额外提供文件级快捷方式（打开 `projects.conf`、配置目录、控制台日志）和「在浏览器中打开」。这样重写成 Go 版时，可以先用浏览器验证行为，再决定是否补外壳。
 
 **判断一次操作走哪条路：** 只涉及一个项目 → `start_fast`（立即返回，进度靠轮询）；涉及多个项目 → `start_ordered`（拓扑排序后逐个项目 `start_fast` + 等就绪）；构建/更新/安装/Git → 任务队列（全局串行）。
 

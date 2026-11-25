@@ -1,8 +1,10 @@
 # TXLC 本地服务控制台（dev-tools）
 
-在浏览器里管理本机多个 Java 服务 / 前端项目 / 传统门户的**启停、构建、热更新、日志、Git、端口与健康巡检**。
+管理本机多个 Java 服务 / 前端项目 / 传统门户的**启停、构建、热更新、日志、Git、端口与健康巡检**。
 
-> 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）与 S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）已完成。详见 [ROADMAP.md](./ROADMAP.md)。
+**两个入口，同一份配置**：双击 `服务控制台.app` 得到原生窗口（日常管理用）；浏览器打开 `http://localhost:18000` 得到网页版（多屏、远程调试用）。两边读写同一份 `projects.conf` / `ports.conf` / `deps.conf`，配置在哪个入口做都一样。
+
+> 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）与 S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）已完成，S2.5 原生窗口外壳已完成。详见 [ROADMAP.md](./ROADMAP.md)。
 >
 > 后续计划用 Go + Vue 3 重写为 `txlc-console`，本仓库是那次重写的**可运行规格书**——行为契约见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)。
 
@@ -12,9 +14,21 @@
 
 ```bash
 cd ~/java/dev-tools
-python3 dashboard.py          # 或双击「服务控制台.app」
-# 浏览器打开 http://localhost:18000
+python3 dashboard.py          # 启动服务（只用标准库）
+# 入口一：双击 服务控制台.app —— 原生窗口，不需要浏览器
+# 入口二：浏览器打开 http://localhost:18000 —— 网页版
 ```
+
+`服务控制台.app` 会先确保服务在跑，再打开原生窗口；直接跑 `dashboard.py` 时只提供网页入口。
+
+首次从源码构建应用（需要 Xcode Command Line Tools，提供 `swiftc`）：
+
+```bash
+./app/build.sh                       # 生成 ./服务控制台.app
+./app/build.sh /Applications/服务控制台.app   # 或装到别处
+```
+
+没有 `swiftc` 时应用会退化成「启动服务 + 默认浏览器打开」，功能不受影响。
 
 只监听 `127.0.0.1`，不对外暴露。端口可用 `TXLC_DASHBOARD_PORT` 覆盖。
 
@@ -27,6 +41,17 @@ python3 dashboard.py          # 或双击「服务控制台.app」
 | JDK 17 | Java 服务 | 脚本按 `JAVA_HOME` 或常见安装位置查找 |
 | Maven | 构建 | 找不到时自动尝试 `~/dev-tools/apache-maven-*` |
 | Node + 包管理器 | 前端项目 | 按项目 install 列决定 npm/pnpm/yarn/bun |
+
+### 应用入口与网页入口
+
+| 入口 | 打开方式 | 适合什么 |
+|---|---|---|
+| App | 双击 `服务控制台.app` | 日常启停、日志、排障。独立窗口、Dock 图标、原生菜单，没有浏览器地址栏和标签页 |
+| 网页 | 浏览器打开 `http://localhost:18000` | 多屏、临时调试、把页面贴到另一台设备上操作 |
+
+两者共用同一个后端、同一份配置文件，配置（添加项目、端口、依赖、Git 设置）在哪个入口做都一样。
+
+App 菜单除了刷新，还提供：**在浏览器中打开（网页配置入口）**、**打开配置文件**（`projects.conf`）、**打开配置目录**、**打开控制台日志**。页面里的「页面入口 / 接口文档 / 日志链接」用 `target=_blank`，一律交给系统浏览器打开，不在 App 里再开没有地址栏的子窗口。
 
 ---
 
@@ -64,6 +89,7 @@ python3 dashboard.py          # 或双击「服务控制台.app」
 | `dashboard.html` | 单页前端，内联 CSS 与 JS（约 4,000 行） |
 | `devctl.sh` | 进程与构建的实际执行者：启动/停止/重启/更新/热更新/状态 JSON |
 | `console_platform.py` | 平台适配层：端口列表、进程树、终止、通知、打开浏览器、临时目录 |
+| `app/` | macOS 原生窗口外壳：`shell.swift`（WKWebView + 菜单）、`launcher.sh`（先起服务再开窗）、`build.sh`（swiftc 编译并签名） |
 | `tests/` | 标准库 `unittest` 用例（健康检查、探活、端口释放、配置写入、依赖闸门、分组、拓扑排序） |
 | `projects.conf` | 项目注册表（13 列，见下） |
 | `ports.conf` | 端口覆盖表：项目实际监听端口与 `projects.conf` 不同时用 |

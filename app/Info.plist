@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- 入口脚本先确保本地服务在跑，再 exec 原生窗口二进制。 -->
+  <key>CFBundleExecutable</key><string>launcher</string>
+  <key>CFBundleIdentifier</key><string>com.txlc.devctl.dashboard</string>
+  <key>CFBundleName</key><string>服务控制台</string>
+  <key>CFBundleDisplayName</key><string>服务控制台</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleVersion</key><string>2.0</string>
+  <key>CFBundleShortVersionString</key><string>2.0</string>
+  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <!-- 只加载本机 http://localhost:18000 的页面，放行本地网络的明文请求。 -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key><true/>
+    <key>NSAllowsArbitraryLoadsInWebContent</key><true/>
+  </dict>
+</dict>
+</plist>
