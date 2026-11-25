@@ -4,7 +4,7 @@
 
 **两个入口，同一份配置**：双击 `服务控制台.app` 得到原生窗口（日常管理用）；浏览器打开 `http://localhost:18000` 得到网页版（多屏、远程调试用）。两边读写同一份 `projects.conf` / `ports.conf` / `deps.conf`，配置在哪个入口做都一样。
 
-> 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）与 S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）已完成，S2.5 原生窗口外壳已完成。详见 [ROADMAP.md](./ROADMAP.md)。
+> 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）与 S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）已完成，S2.5 原生窗口外壳、S2.6 诊断日志已完成。详见 [ROADMAP.md](./ROADMAP.md)。
 >
 > 后续计划用 Go + Vue 3 重写为 `txlc-console`，本仓库是那次重写的**可运行规格书**——行为契约见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)。
 
@@ -76,6 +76,7 @@ App 菜单除了刷新，还提供：**在浏览器中打开（网页配置入�
 
 - 健康巡检 + 崩溃自动重启（启动宽限期、失败阈值、重启冷却、预算上限）。
 - 日志弹窗：关键字过滤与高亮、级别过滤、只看错误、导出当前视图。
+- 诊断日志：把控制台自身、任务、项目输出、健康巡检、应用日志汇总到一处，看尾部、单文件下载、导出诊断包。
 - 端口面板：端口 → 进程 → 项目，一键释放（只允许当前真实监听的端口）。
 - Git 面板：分支、改动、提交历史、拉取、stash、冲突解决、diff。
 
@@ -90,6 +91,8 @@ App 菜单除了刷新，还提供：**在浏览器中打开（网页配置入�
 | `devctl.sh` | 进程与构建的实际执行者：启动/停止/重启/更新/热更新/状态 JSON |
 | `console_platform.py` | 平台适配层：端口列表、进程树、终止、通知、打开浏览器、临时目录 |
 | `app/` | macOS 原生窗口外壳：`shell.swift`（WKWebView + 菜单）、`launcher.sh`（先起服务再开窗）、`build.sh`（swiftc 编译并签名） |
+| `logs/` | 控制台自身日志 `console.log`（运行时生成，已 gitignore） |
+| `tests/test_diagnostics.py` | 诊断清单、id 白名单、512KB 截断、诊断包不含配置 |
 | `tests/` | 标准库 `unittest` 用例（健康检查、探活、端口释放、配置写入、依赖闸门、分组、拓扑排序） |
 | `projects.conf` | 项目注册表（13 列，见下） |
 | `ports.conf` | 端口覆盖表：项目实际监听端口与 `projects.conf` 不同时用 |
@@ -180,6 +183,9 @@ portal.example.internal
 | GET | `/api/log` | 服务日志 / 操作日志，支持 `lines`、`kind`、`source` |
 | GET | `/api/ports` | 本机监听端口 → 进程 → 项目 |
 | GET | `/api/health` | 全部项目的探活配置与状态 |
+| GET | `/api/diagnostics` | 诊断日志清单（控制台 / 任务 / 项目输出 / 健康巡检 / 应用日志） |
+| GET | `/api/diagnostics/tail` | 按诊断 id 读取某个日志的末尾内容，支持 `lines` |
+| GET | `/api/diagnostics/file` | 按诊断 id 下载单个日志（末尾 2MB） |
 | GET | `/api/jobs`、`/api/job` | 任务列表与单个任务输出 |
 | GET | `/api/git`、`/api/git/conflicts` | 分支/改动/提交历史、冲突列表 |
 | GET | `/api/project/inspect`、`/api/project/pick-dir` | 目录检测、目录选择 |
@@ -189,6 +195,7 @@ portal.example.internal
 | POST | `/api/project/add`、`/api/project/update`、`/api/project/port` | 增改项目与端口 |
 | POST | `/api/git/commit`、`/resolve`、`/stash-apply`、`/stash-drop`、`/open-diff` | Git 面板动作 |
 | POST | `/api/job/stop`、`/api/shutdown` | 停止任务、关闭控制台 |
+| POST | `/api/diagnostics/export` | 导出诊断包 zip（日志末尾各 512KB，**不含配置文件**） |
 
 `POST /api/action` 的请求体：
 
@@ -204,10 +211,41 @@ portal.example.internal
 
 ---
 
+## 日志与排障
+
+出问题先看**诊断日志**：顶栏右上角的文件图标（App 里同样有），左边是日志清单，右边是尾部内容，右上角可导出诊断包。
+
+日志分四类，位置各不相同：
+
+| 类别 | 位置 | 什么时候看 |
+|---|---|---|
+| 控制台自身 | `logs/console.log`（2MB × 3 轮转） | 页面打不开、接口 500、控制台自己崩了。启动/退出、每个 HTTP 请求、异常堆栈都在这 |
+| 任务 | 系统临时目录 `txlc-dashboard/jobs/<id>.log` | 构建/更新/Git 操作为什么失败；`<id>.json` 是动作与目标 |
+| 项目输出 | 系统临时目录 `<项目>.log`、`<项目>.action.log` | 服务起不来、启动即退出；`action` 是控制台执行启停命令的输出 |
+| 应用日志 | Spring Boot 的 `~/logs/<项目>/app.log`、`error.log` | 服务起来了但接口报错、业务异常 |
+| 健康巡检 | 系统临时目录 `<项目>.health.log` | 服务被自动重启过几次、什么时候挂的 |
+
+诊断面板会把上面这些汇总成一份清单（只列真实存在的文件，按控制台 → 任务 → 项目排序），点开即看末尾 800 行，支持单文件下载。
+
+**导出诊断包**：`POST /api/diagnostics/export`，zip 内含 `meta.txt`（时间、目录、平台）与每个日志的末尾 512KB。**故意不打包 `*.conf`**——里面可能有内网地址和本机绝对路径，需要给别人时请自行确认后再单独发。
+
+命令行查同一份日志：
+
+```bash
+tail -f logs/console.log                      # 控制台自身
+tail -f /tmp/txlc-dashboard.log               # 启动器 stdout（进程被系统杀掉时看这里）
+tail -f /tmp/svc-price.log                    # 某个服务的输出
+```
+
+> `logs/` 已加入 `.gitignore`；日志不进仓库，也不会进诊断包里的配置项。
+
+---
+
 ## 运行时文件放在哪
 
 | 路径 | 内容 |
 |---|---|
+| `logs/console.log`（+ `.1`~`.3` 轮转） | 控制台自身日志，诊断面板的主要来源 |
 | `/tmp/txlc-dashboard/jobs/` | 任务日志 `<job>.log` 与元数据 `<job>.json`（保留最近 20 个） |
 | `/tmp/<项目>.action.running`、`.action.exit` | 异步启停的进度标记与退出码 |
 | `/tmp/<项目>.action.log` | 启停操作的输出 |
@@ -223,7 +261,7 @@ portal.example.internal
 - **仅 macOS**：`devctl.sh` 依赖 `lsof`、`pkill`、`osascript`；生成的服务脚本也是 bash。Windows 支持见 ROADMAP S3。
 - **前端是单文件**：CSS/JS 内联在 `dashboard.html`，无法单独测试、改动冲突概率高。
 - **无持久化**：任务历史与健康状态都在临时目录，控制台重启即丢。
-- **测试覆盖有限**：32 个用例覆盖健康检查、端口逻辑、依赖探活与闸门、分组展开、拓扑排序；Git 解析、路径推导、前端逻辑尚无测试。
+- **测试覆盖有限**：40 个用例覆盖健康检查、端口逻辑、依赖探活与闸门、分组展开、拓扑排序、诊断日志白名单与打包；Git 解析、路径推导、前端逻辑尚无测试。
 - **版本号是文件 mtime**：`/api/status` 的 `version` 用于前端自动刷新，不是语义化版本。
 - **依赖探活只到端口**：`tcp` 只判断端口可连，不代表库/账号/权限可用；`http` 只发一次 GET。
 - **编排进度只在内存**：控制台重启后 `ordered` 丢失；项目自身状态仍靠临时目录与端口推断。

@@ -148,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         consoleMenu.addItem(menuItem("打开配置文件", #selector(openConfigFile), ""))
         consoleMenu.addItem(menuItem("打开配置目录", #selector(openConfigDirectory), ""))
         consoleMenu.addItem(menuItem("打开控制台日志", #selector(openConsoleLog), ""))
+        consoleMenu.addItem(menuItem("打开日志目录", #selector(openLogDirectory), ""))
         mainMenu.addItem(consoleItem)
 
         // 编辑菜单：WKWebView 里的输入框（搜索、过滤、弹窗表单）依赖它才能复制粘贴。
@@ -225,11 +226,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSWorkspace.shared.open(URL(fileURLWithPath: consoleDir))
     }
 
+    /// 控制台自身日志：优先看 logs/console.log（会轮转、重启后仍在），
+    /// 退回到启动器重定向的临时文件（进程被系统直接杀掉时只有它有内容）。
     @objc private func openConsoleLog() {
-        let path = "/tmp/txlc-dashboard.log"
-        if FileManager.default.fileExists(atPath: path) {
+        let candidates = [
+            (consoleDir as NSString).appendingPathComponent("logs/console.log"),
+            "/tmp/txlc-dashboard.log",
+        ]
+        for path in candidates where FileManager.default.fileExists(atPath: path) {
             NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            return
         }
+        // 一个都没有时打开日志目录，避免点了没反应。
+        openLogDirectory()
+    }
+
+    @objc private func openLogDirectory() {
+        let dir = (consoleDir as NSString).appendingPathComponent("logs")
+        if !FileManager.default.fileExists(atPath: dir) {
+            try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: dir))
     }
 
     // ---------------------------------------------------------------

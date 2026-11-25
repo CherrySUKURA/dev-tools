@@ -6,8 +6,11 @@
 # 启动：/usr/bin/python3 dashboard.py
 # 访问：http://localhost:18000
 
+import hashlib
 import http.client
+import io
 import json
+import logging
 import os
 import re
 import shlex
@@ -21,6 +24,8 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import zipfile
+from logging.handlers import RotatingFileHandler
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -37,6 +42,9 @@ PORTS_CONF = BASE_DIR / "ports.conf"
 SERVICES_DIR = BASE_DIR / "services"
 JOB_DIR = Path("/tmp/txlc-dashboard/jobs")
 WATCH_DIR = Path("/tmp/txlc-dashboard/watch")
+# 控制台自身的日志目录：跟业务项目日志分开，重启后还能查；按大小轮转。
+# 业务日志仍在项目目录/临时目录，诊断面板会把它们汇总到一起。
+LOG_DIR = Path(os.environ.get("TXLC_LOG_DIR") or (BASE_DIR / "logs"))
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("TXLC_DASHBOARD_PORT", "18000"))
 # 控制台对外展示、生成给浏览器打开的本地地址使用的主机名。
@@ -151,6 +159,37 @@ FRONTEND_FRAMEWORK_LABELS = {
     "cra": "Create React App", "umi": "Umi", "vue-cli": "Vue CLI",
     "angular": "Angular", "generic": "通用 Node 项目",
 }
+
+
+
+# 控制台自身日志：用标准 logging + 文件轮转，出问题时有固定位置可查。
+logger = logging.getLogger("txlc.console")
+
+
+def configure_logging():
+    """把控制台进程日志写到 <控制台目录>/logs/console.log（2MB × 3 轮转）。
+
+    为什么不只依赖启动器的 stdout 重定向：那个文件在临时目录，重启机器就没了；
+    控制台自己的报错（500、异常堆栈、退出原因）需要留下来才能定位问题。
+    """
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+    file_handler = RotatingFileHandler(
+        LOG_DIR / "console.log", maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
+    file_handler.setFormatter(formatter)
+    root.addHandler(file_handler)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    root.addHandler(stream_handler)
+    logger.info(
+        "控制台启动：http://%s:%s，目录 %s，Python %s",
+        LOCAL_HOST, PORT, BASE_DIR, sys.version.split()[0],
+    )
 
 
 def run_devctl(args, timeout=20):
@@ -2177,6 +2216,167 @@ def tail_file(path, lines):
     return "\n".join(text.splitlines()[-lines:])
 
 
+# ---------------------------------------------------------------
+# 诊断日志
+#
+# 为什么单独一块：出错时最怕「日志在哪」说不清。控制台自身日志、任务日志、
+# 项目输出、健康巡检日志分散在控制台目录和系统临时目录里，这里统一汇总成
+# 可浏览的清单，并支持导出诊断包（zip）直接发给别人排查。
+# ---------------------------------------------------------------
+
+DIAG_INDEX = {}  # 诊断 id -> 文件路径；只有登记过的路径允许被读取
+DIAG_GROUPS = [
+    ("console", "控制台"),
+    ("job", "任务"),
+    ("project", "项目输出"),
+    ("health", "健康巡检"),
+    ("app", "应用日志"),
+]
+
+
+def diag_id(path):
+    """用路径哈希做诊断条目标识，避免把任意路径直接暴露成查询参数。"""
+    resolved = Path(path).expanduser().resolve()
+    return hashlib.sha1(str(resolved).encode("utf-8")).hexdigest()[:12]
+
+
+def _add_diag(entries, seen, group, label, path, project=""):
+    """登记一个日志文件；不存在或重复的静默跳过。"""
+    candidate = Path(path).expanduser()
+    try:
+        if not candidate.is_file():
+            return
+        stat = candidate.stat()
+    except OSError:
+        return
+    key = diag_id(candidate)
+    if key in seen:
+        return
+    seen.add(key)
+    DIAG_INDEX[key] = candidate
+    entries.append({
+        "id": key,
+        "group": group,
+        "label": label,
+        "project": project,
+        "name": candidate.name,
+        "path": str(candidate),
+        "size": stat.st_size,
+        "mtime": int(stat.st_mtime),
+    })
+
+
+def diagnostics_entries():
+    """汇总控制台自身相关的日志文件，按「控制台 → 任务 → 项目」排序。
+
+    注意：这里只登记路径，不读内容；读内容要再用 id 走 resolve_diag_entry，
+    保证接口不能读任意文件。
+    """
+    DIAG_INDEX.clear()
+    entries, seen = [], set()
+
+    # 控制台自身日志（含轮转出来的历史文件）。
+    _add_diag(entries, seen, "console", "控制台主日志", LOG_DIR / "console.log")
+    if LOG_DIR.exists():
+        for rotated in sorted(LOG_DIR.glob("console.log.*")):
+            _add_diag(entries, seen, "console", f"控制台主日志（{rotated.name.rsplit('.', 1)[-1]}）", rotated)
+
+    # 任务日志：最近 20 个，按修改时间倒序，标签用任务元数据补全。
+    recent_jobs = []
+    if JOB_DIR.exists():
+        try:
+            recent_jobs = sorted(
+                JOB_DIR.glob("*.log"), key=lambda item: item.stat().st_mtime, reverse=True
+            )[:20]
+        except OSError:
+            recent_jobs = []
+    for log_path in recent_jobs:
+        meta = {}
+        try:
+            meta = json.loads(log_path.with_suffix(".json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+        action = meta.get("action") or "任务"
+        target = meta.get("target") or log_path.stem
+        _add_diag(entries, seen, "job", f"{action} · {target}", log_path, str(target))
+
+    # 项目相关：服务输出、启停操作、健康巡检、应用日志（Spring Boot 自己写的）。
+    try:
+        projects = get_projects()
+    except Exception:  # noqa: BLE001 - 诊断面板不能因为状态接口失败就整个打不开
+        logger.exception("汇总项目日志时读取状态失败")
+        projects = []
+    for project in projects:
+        name = project.get("name") or ""
+        if not name:
+            continue
+        _add_diag(entries, seen, "project", "服务输出", project.get("log") or f"/tmp/{name}.log", name)
+        _add_diag(entries, seen, "project", "启停操作", f"/tmp/{name}.action.log", name)
+        _add_diag(entries, seen, "health", "健康巡检", health_log_path(name, "health"), name)
+        for kind, sources in (project.get("log_sources") or {}).items():
+            for source in sources:
+                if source.get("path"):
+                    _add_diag(entries, seen, "app", source.get("label") or kind, source["path"], name)
+
+    order = {key: index for index, (key, _) in enumerate(DIAG_GROUPS)}
+    entries.sort(key=lambda item: (order.get(item["group"], 99), -item["mtime"]))
+    return entries
+
+
+def resolve_diag_entry(diag):
+    """把前端传来的诊断 id 还原成路径；不认识的 id 一律拒绝。"""
+    return DIAG_INDEX.get(str(diag or ""))
+
+
+def read_tail_bytes(path, limit=LOG_TAIL_BYTES):
+    """读取文件末尾的原始字节，用于打包诊断文件（不整份加载大日志）。"""
+    file_path = Path(path)
+    size = file_path.stat().st_size
+    with file_path.open("rb") as handle:
+        if size > limit:
+            handle.seek(size - limit)
+        return handle.read()
+
+
+def build_diagnostics_zip(entries):
+    """把诊断清单打成 zip：meta.txt + 每个日志文件的末尾 512KB。
+
+    不打包 *.conf：里面可能有内网地址和本机绝对路径，发出去前应由人确认。
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        lines = [
+            "TXLC 服务控制台诊断包",
+            f"生成时间: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"控制台地址: http://{LOCAL_HOST}:{PORT}",
+            f"控制台目录: {BASE_DIR}",
+            f"Python: {sys.version.split()[0]}",
+            f"平台: {sys.platform}",
+            "",
+            "说明：只包含日志文件末尾内容，不包含 projects.conf / deps.conf 等配置",
+            "（配置里可能有内网地址，需要时请单独确认后再发）。",
+            "",
+            "日志文件:",
+        ]
+        used_names = set()
+        for entry in entries:
+            path = resolve_diag_entry(entry.get("id"))
+            if path is None:
+                continue
+            arcname = f'{entry["group"]}/{entry.get("project") or "console"}/{path.name}'
+            if arcname in used_names:
+                arcname = f'{entry["group"]}/{entry.get("project") or "console"}/{path.stem}-{entry["id"]}{path.suffix}'
+            used_names.add(arcname)
+            lines.append(f"  {arcname}  ({entry.get('size', 0)} bytes, {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('mtime') or 0))})")
+            try:
+                data = read_tail_bytes(path)
+            except OSError:
+                continue
+            archive.writestr(arcname, data)
+        archive.writestr("meta.txt", "\n".join(lines) + "\n")
+    return buffer.getvalue()
+
+
 def watch_pid(target):
     """检查热更新监听进程是否存活。"""
     path = Path("/tmp/dev-watch-all.pid") if target == "all" else Path(f"/tmp/{target}.watch.pid")
@@ -3288,13 +3488,31 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("%s - %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
+        # 访问日志也进 logs/console.log；StreamHandler 同时保留终端输出。
+        message = fmt % args
+        # 前端 1 秒轮询 /api/status，成功的轮询不记（一天能刷上万行，把真正的报错挤掉）；
+        # 非 200 的轮询仍然记录，排障时能看出是哪一次开始出问题。
+        if "/api/status" in message and " 200 " in message:
+            logger.debug("%s %s", self.address_string(), message)
+            return
+        logger.info("%s %s", self.address_string(), message)
 
     def send_json(self, status, payload):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_bytes(self, status, data, content_type, filename=None):
+        """发送二进制内容（日志下载 / 诊断包），带 Content-Length 保证长连接正常结束。"""
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
@@ -3403,6 +3621,44 @@ class Handler(BaseHTTPRequestHandler):
                     # 按依赖顺序执行的编排进度（启动组 / 批量操作）。
                     "ordered": ordered_snapshot(),
                 })
+                return
+            if parsed.path == "/api/diagnostics":
+                entries = diagnostics_entries()
+                self.send_json(200, {
+                    "log_dir": str(LOG_DIR),
+                    "temp_dir": str(plat.temp_dir()),
+                    "groups": [{"key": key, "label": label} for key, label in DIAG_GROUPS],
+                    "entries": entries,
+                })
+                return
+            if parsed.path == "/api/diagnostics/tail":
+                qs = parse_qs(parsed.query)
+                entry_path = resolve_diag_entry((qs.get("id") or [""])[0])
+                if entry_path is None:
+                    self.send_json(404, {"error": "日志条目已过期，请刷新诊断面板"})
+                    return
+                try:
+                    lines = int((qs.get("lines") or ["400"])[0])
+                except ValueError:
+                    lines = 400
+                lines = max(50, min(lines, 5000))
+                self.send_json(200, {
+                    "content": tail_file(entry_path, lines),
+                    "path": str(entry_path),
+                })
+                return
+            if parsed.path == "/api/diagnostics/file":
+                qs = parse_qs(parsed.query)
+                entry_path = resolve_diag_entry((qs.get("id") or [""])[0])
+                if entry_path is None:
+                    self.send_json(404, {"error": "日志条目已过期，请刷新诊断面板"})
+                    return
+                try:
+                    data = read_tail_bytes(entry_path, 2 * 1024 * 1024)
+                except OSError as exc:
+                    self.send_json(500, {"error": f"读取日志失败：{exc}"})
+                    return
+                self.send_bytes(200, data, "text/plain; charset=utf-8", entry_path.name)
                 return
             if parsed.path == "/api/log":
                 qs = parse_qs(parsed.query)
@@ -3570,7 +3826,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, payload)
                 return
             self.send_json(404, {"error": "接口不存在"})
+        except (BrokenPipeError, ConnectionResetError):
+            # 页面在响应写完前被关闭/重载（重启控制台时最常见），不是故障，
+            # 记为调试信息即可，避免真正的报错被这类堆栈淹没。
+            logger.debug("客户端提前断开：GET %s", self.path)
         except Exception as exc:  # noqa: BLE001 - 统一返回错误给前端
+            logger.exception("GET %s 失败", self.path)
             self.send_json(500, {"error": str(exc)})
 
     def do_POST(self):
@@ -3752,8 +4013,18 @@ class Handler(BaseHTTPRequestHandler):
                     threading.Thread(target=server_ref.shutdown, daemon=True).start()
                 return
 
+            if parsed.path == "/api/diagnostics/export":
+                entries = diagnostics_entries()
+                payload = build_diagnostics_zip(entries)
+                filename = time.strftime("txlc-diagnostics-%Y%m%d-%H%M%S.zip")
+                self.send_bytes(200, payload, "application/zip", filename)
+                return
+
             self.send_json(404, {"error": "接口不存在"})
+        except (BrokenPipeError, ConnectionResetError):
+            logger.debug("客户端提前断开：POST %s", self.path)
         except Exception as exc:  # noqa: BLE001 - 统一返回错误给前端
+            logger.exception("POST %s 失败", self.path)
             self.send_json(500, {"error": str(exc)})
 
 
@@ -3764,6 +4035,7 @@ class Server(ThreadingHTTPServer):
 
 def main():
     global server_ref
+    configure_logging()
     cleanup_old_jobs()
     # 健康巡检独立线程：不阻塞 HTTP 服务，控制台关掉后线程随进程退出。
     threading.Thread(target=health_loop, daemon=True).start()
@@ -3774,9 +4046,13 @@ def main():
     try:
         server_ref.serve_forever()
     except KeyboardInterrupt:
-        pass
+        logger.info("收到 Ctrl+C，控制台退出")
+    except Exception:  # noqa: BLE001 - 退出前把堆栈留在日志里
+        logger.exception("控制台异常退出")
+        raise
     finally:
         server_ref.server_close()
+        logger.info("控制台已关闭")
 
 
 if __name__ == "__main__":

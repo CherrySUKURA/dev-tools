@@ -58,6 +58,8 @@ devctl.sh（bash 核心）
 
 | 位置 | 内容 | 生命周期 |
 |---|---|---|
+| `logs/console.log`（+ `.1`~`.3`） | 控制台进程日志：启动/退出、访问日志、异常堆栈；2MB × 3 轮转 | 持久，重启后仍可查 |
+| `logs/`（可用 `TXLC_LOG_DIR` 覆盖） | 目录本身进 `.gitignore`，不进仓库 | — |
 | `/tmp/<项目>.pid` | 启动后的主进程 PID | 重启机器即失效 |
 | `/tmp/<项目>.log` | 服务 stdout/stderr | 覆盖写 |
 | `/tmp/<项目>.action.running` | 正在执行的启停动作名 | 动作结束后删除 |
@@ -133,6 +135,8 @@ devctl.sh（bash 核心）
 - `GET /api/deps` 只做探活，不做增删；`refresh=1` 同步重探，其余情况返回最近一次结果。
 - `POST /api/ports/kill` 只允许释放**当前真实监听**的端口，禁止杀控制台自身与 PID 0/1。
 - `POST /api/health` 写入 `health.conf` 时，非法输入必须拒绝而不是写坏文件。
+- `GET /api/diagnostics*` 只接受**本次清单登记过的 id**（路径 sha1 前 12 位），不能拿 id 读任意文件；清单本身也只列真实存在的日志。`POST /api/diagnostics/export` 每个文件最多 512KB，且**不得包含 `*.conf`**。
+- 控制台自身日志必须落盘（`logs/console.log`），不能只依赖启动器的 stdout 重定向——那个文件在临时目录，重启机器就没了。
 
 ### 6.2 配置
 

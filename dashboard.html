@@ -1441,6 +1441,110 @@
     background: currentColor;
     border-radius: 999px;
   }
+
+  /* ---------- 诊断日志：左侧文件清单 + 右侧尾随 ---------- */
+  .diag-modal { width: min(1200px, 96vw); height: min(86vh, 860px); }
+  .diag-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 290px minmax(0, 1fr);
+    min-height: 0;
+  }
+  .diag-side {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--surface-soft);
+    border-right: 1px solid var(--line);
+  }
+  .diag-side-head { padding: 10px 14px 8px; border-bottom: 1px solid var(--line); }
+  .diag-side-head strong { font-size: 12px; color: var(--text); }
+  .diag-dir {
+    margin: 3px 0 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.5;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .diag-list { flex: 1; min-height: 0; overflow: auto; padding: 6px; }
+  .diag-group { margin-bottom: 6px; }
+  .diag-group h4 {
+    margin: 8px 8px 4px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+  .diag-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    padding: 6px 8px;
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+  }
+  .diag-item:hover { background: #fff; border-color: var(--line); }
+  .diag-item.is-active { background: #fff; border-color: var(--line-strong); box-shadow: var(--shadow-xs); }
+  .diag-item-name {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .diag-item-meta {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .diag-empty { padding: 18px 10px; color: var(--muted); font-size: 12px; text-align: center; }
+  .diag-view { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .diag-view-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .diag-view-head strong { flex: 0 0 auto; font-size: 12.5px; }
+  .diag-path {
+    flex: 1;
+    overflow: hidden;
+    color: var(--muted);
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .diag-tail {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: 12px 14px;
+    overflow: auto;
+    color: var(--console-text);
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--console);
+  }
+  @media (max-width: 720px) {
+    .diag-body { grid-template-columns: 1fr; grid-template-rows: 180px minmax(0, 1fr); }
+    .diag-side { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
   .deps-uses { color: var(--muted); font-size: 12px; }
   /* 有依赖不通时，顶栏的“依赖”按钮变红，避免用户以为一切正常。 */
   header .btn.is-bad { color: #fecaca; background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.32); }
@@ -1499,6 +1603,9 @@
     <button id="btn-deps" class="btn icon" onclick="openDeps()" title="外部依赖（MySQL / Redis 等）" aria-label="外部依赖">
       <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
       <span id="deps-badge" class="icon-badge">…</span>
+    </button>
+    <button class="btn icon" onclick="openDiag()" title="诊断日志（控制台 / 任务 / 项目）" aria-label="诊断日志">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3.5H6.5A1.5 1.5 0 0 0 5 5v14a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5z"/><path d="M14 3.5V9h5"/><path d="M8.5 13h7M8.5 16.5h5"/></svg>
     </button>
     <button class="btn icon" onclick="loadStatus(true)" title="立即刷新状态" aria-label="立即刷新状态">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 4.5V10h-5.5"/></svg>
@@ -1988,6 +2095,41 @@
 </div>
 
 <!-- 外部依赖面板：MySQL / Redis 这类不归控制台管、但服务启动前必须能连上的中间件。 -->
+<!-- 诊断日志：把控制台自身、任务、项目输出、健康巡检的日志汇总到一处。 -->
+<div id="diag-panel" class="log-overlay hidden" onclick="if (event.target === this) hideDiag()">
+  <div class="log-modal diag-modal" role="dialog" aria-modal="true" aria-labelledby="diag-dialog-title">
+    <div class="panel-head log-head">
+      <div class="log-heading">
+        <strong id="diag-dialog-title">诊断日志</strong>
+        <span id="diag-count" class="meta-chip">0 个</span>
+      </div>
+      <div class="log-tools">
+        <button class="btn ghost small" onclick="exportDiagnostics()" title="打包控制台 + 任务 + 项目日志（不含配置文件）">导出诊断包</button>
+        <button class="btn ghost small" onclick="loadDiagnostics(false)">刷新清单</button>
+        <button class="btn ghost small" onclick="hideDiag()">关闭</button>
+      </div>
+    </div>
+    <div class="diag-body">
+      <aside class="diag-side">
+        <div class="diag-side-head">
+          <strong>日志文件</strong>
+          <p class="diag-dir" id="diag-dir"></p>
+        </div>
+        <div id="diag-list" class="diag-list"><div class="diag-empty">正在读取日志清单…</div></div>
+      </aside>
+      <section class="diag-view">
+        <div class="diag-view-head">
+          <strong id="diag-file">选择左侧文件查看</strong>
+          <span class="diag-path" id="diag-path"></span>
+          <a id="diag-download" class="link-btn hidden" href="#" download>下载</a>
+          <button class="link-btn" onclick="refreshDiagTail()">刷新内容</button>
+        </div>
+        <pre id="diag-tail" class="diag-tail">左侧选择一个日志文件…</pre>
+      </section>
+    </div>
+  </div>
+</div>
+
 <div id="deps-panel" class="log-overlay hidden" onclick="if (event.target === this) hideDeps()">
   <div class="log-modal deps-modal" role="dialog" aria-modal="true" aria-labelledby="deps-title">
     <div class="panel-head log-head">
@@ -2046,6 +2188,9 @@ const state = {
   commitData: null, // 当前提交的明细数据，切换“只看改动行”时复用
   serverVersion: null, // 控制台文件版本；变化时只提示刷新，不强制重载以免关掉弹窗
   lastRenderSignature: null, // 状态没变时不重建卡片，避免按钮闪烁
+  diagEntries: [], // 诊断面板的日志清单：控制台 / 任务 / 项目 / 健康 / 应用
+  diagGroups: [], // 诊断分组顺序与中文名（后端下发）
+  diagSelected: null, // 当前查看的日志 id
   watchOverride: {}, // 热更新操作成功后短暂覆盖状态缓存，避免按钮闪回
   portOverride: {}, // 端口保存后短暂覆盖状态缓存，避免旧轮询结果把端口翻回去
   listTab: "backend", // 当前页签：backend | frontend
@@ -4925,7 +5070,9 @@ async function submitSettings() {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  if (!$("settings-panel").classList.contains("hidden")) {
+  if (!$("diag-panel").classList.contains("hidden")) {
+    hideDiag();
+  } else if (!$("settings-panel").classList.contains("hidden")) {
     hideSettings();
   } else if (!$("port-panel").classList.contains("hidden")) {
     hidePortModal();
@@ -4955,6 +5102,169 @@ async function shutdownPanel() {
   try {
     await api("/api/shutdown", { method: "POST" });
     document.body.innerHTML = '<div class="bye">控制台已关闭，可以关闭此页面。</div>';
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// ---------------------------------------------------------------
+// 诊断日志：控制台自身、任务、项目输出、健康巡检、应用日志
+//
+// 出问题时的第一反应是「日志在哪」。日志其实分散在控制台目录、系统临时目录、
+// 项目自己的 logs/ 里，这一块把它们汇总成一份清单，选中即可看末尾内容，
+// 也能一次性导出诊断包（不含 *.conf）。
+// ---------------------------------------------------------------
+
+/// 把字节数格式化成 KB/MB，左侧清单里显示日志大小用。
+function formatSize(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/// 把时间戳格式化成「今天 14:03」这种短格式，清单里空间有限。
+function formatLogTime(seconds) {
+  if (!seconds) return "";
+  const date = new Date(seconds * 1000);
+  const pad = (n) => String(n).padStart(2, "0");
+  const today = new Date();
+  const sameDay = date.toDateString() === today.toDateString();
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return sameDay ? `今天 ${time}` : `${date.getMonth() + 1}-${pad(date.getDate())} ${time}`;
+}
+
+function openDiag() {
+  $("diag-panel").classList.remove("hidden");
+  // 每次打开都重新取清单：服务刚重启过时，任务/日志文件可能已经变了。
+  loadDiagnostics(true);
+}
+
+function hideDiag() {
+  $("diag-panel").classList.add("hidden");
+}
+
+/// 拉取日志清单并渲染左侧列表。
+/// keepSelection=true 时尽量保持当前选中的文件，避免刷新后跳回第一个。
+async function loadDiagnostics(keepSelection) {
+  const list = $("diag-list");
+  if (list) list.innerHTML = '<div class="diag-empty">正在读取日志清单…</div>';
+  try {
+    const data = await api("/api/diagnostics");
+    state.diagEntries = data.entries || [];
+    state.diagGroups = data.groups || [];
+    const dir = $("diag-dir");
+    if (dir) dir.textContent = data.log_dir || "";
+    const count = $("diag-count");
+    if (count) count.textContent = `${state.diagEntries.length} 个`;
+    renderDiagList();
+    if (!keepSelection || !state.diagSelected) {
+      state.diagSelected = state.diagEntries.length ? state.diagEntries[0].id : null;
+    }
+    if (state.diagSelected) {
+      selectDiag(state.diagSelected);
+    } else {
+      $("diag-tail").textContent = "没有找到日志文件。服务启动一次后，这里会出现控制台与项目日志。";
+    }
+  } catch (e) {
+    if (list) list.innerHTML = `<div class="diag-empty">${escapeHtml(e.message)}</div>`;
+    toast(e.message, true);
+  }
+}
+
+/// 按后端下发的分组顺序渲染：同一组内按修改时间倒序。
+function renderDiagList() {
+  const list = $("diag-list");
+  if (!list) return;
+  if (!state.diagEntries.length) {
+    list.innerHTML = '<div class="diag-empty">暂无日志文件</div>';
+    return;
+  }
+  const groupOrder = state.diagGroups.map((group) => group.key);
+  const groupLabel = {};
+  state.diagGroups.forEach((group) => { groupLabel[group.key] = group.label; });
+
+  const grouped = new Map();
+  state.diagEntries.forEach((entry) => {
+    if (!grouped.has(entry.group)) grouped.set(entry.group, []);
+    grouped.get(entry.group).push(entry);
+  });
+  const keys = [...grouped.keys()].sort(
+    (a, b) => (groupOrder.indexOf(a) + 1 || 99) - (groupOrder.indexOf(b) + 1 || 99)
+  );
+
+  list.innerHTML = keys.map((key) => {
+    const items = grouped.get(key).map((entry) => {
+      const active = entry.id === state.diagSelected ? " is-active" : "";
+      // 项目输出这类条目标签相同，补上项目名和文件名，避免认错。
+      const meta = [entry.project, entry.name, formatSize(entry.size), formatLogTime(entry.mtime)]
+        .filter(Boolean).join(" · ");
+      return `<button class="diag-item${active}" onclick="selectDiag('${entry.id}')">
+        <span class="diag-item-name">${escapeHtml(entry.label)}</span>
+        <span class="diag-item-meta">${escapeHtml(meta)}</span>
+      </button>`;
+    }).join("");
+    return `<div class="diag-group"><h4>${escapeHtml(groupLabel[key] || key)}</h4>${items}</div>`;
+  }).join("");
+}
+
+/// 选中一个文件：更新标题/路径/下载链接，并拉取末尾内容。
+function selectDiag(id) {
+  state.diagSelected = id;
+  renderDiagList();
+  const entry = state.diagEntries.find((item) => item.id === id);
+  if (!entry) return;
+  $("diag-file").textContent = `${entry.label}${entry.project ? " · " + entry.project : ""}`;
+  $("diag-path").textContent = entry.path;
+  const download = $("diag-download");
+  // 下载走 whitelist 接口：id 由后端映射回真实路径，前端不直接传路径。
+  download.href = `/api/diagnostics/file?id=${encodeURIComponent(id)}`;
+  download.download = entry.name;
+  download.classList.remove("hidden");
+  refreshDiagTail();
+}
+
+/// 重新拉当前文件的末尾内容（日志在写，需要手动/自动刷新）。
+async function refreshDiagTail() {
+  if (!state.diagSelected) return;
+  const tail = $("diag-tail");
+  try {
+    const data = await api(`/api/diagnostics/tail?id=${encodeURIComponent(state.diagSelected)}&lines=800`);
+    // 文件可能刚被轮转/删除，后端会给 404，这里保持原内容并提示。
+    tail.textContent = data.content || "（文件为空）";
+    tail.scrollTop = tail.scrollHeight; // 默认看最新
+  } catch (e) {
+    tail.textContent = `读取失败：${e.message}`;
+  }
+}
+
+/// 导出诊断包：后端打包 zip（每个日志取末尾 512KB，不含配置文件）。
+async function exportDiagnostics() {
+  try {
+    toast("正在打包诊断包…");
+    const res = await fetch("/api/diagnostics/export", { method: "POST" });
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const data = await res.json();
+        message = data.error || message;
+      } catch (e) { /* 非 JSON 响应 */ }
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    // 用本地时间命名，和日志里的时间戳对得上（toISOString 是 UTC，会差 8 小时）。
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    link.download = `txlc-diagnostics-${stamp}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast("诊断包已导出（不含配置文件）");
   } catch (e) {
     toast(e.message, true);
   }

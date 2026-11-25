@@ -178,6 +178,27 @@
 - **服务与应用解耦**：退出 App 不停止控制台、也不停止业务服务；这与网页入口「关掉标签页不等于关服务」的语义一致。
 - **Windows 外壳留到 S3**：Windows 上用 Edge/Chrome 的 `--app=` 模式即可得到无地址栏窗口，等 `devctl.py` 落地后再提供（当前 bash 执行层还不支持 Windows）。
 
+### S2.6 已完成（2026-11-25）
+
+补上「出问题怎么看日志」这条运维闭环。
+
+| 交付 | 位置 | 验收方式 |
+|---|---|---|
+| 控制台自身日志 | `dashboard.py`：`configure_logging()`、`logger`；`logs/console.log`（2MB × 3 轮转，`TXLC_LOG_DIR` 可覆盖） | 启动/退出、访问日志、GET/POST 异常堆栈都落盘；重启机器后仍在 |
+| 诊断清单接口 | `GET /api/diagnostics` | 汇总控制台 / 任务 / 项目输出 / 健康巡检 / 应用日志，只列真实存在的文件 |
+| 尾随与单文件下载 | `GET /api/diagnostics/tail`、`/file` | id 是路径 sha1 前 12 位，未登记的 id 返回 404 |
+| 诊断包导出 | `POST /api/diagnostics/export` | zip 含 `meta.txt` + 每个日志末尾 512KB；**不含 `*.conf`** |
+| 诊断面板 | `dashboard.html` | 顶栏文件图标；左侧分组清单、右侧尾部内容、单文件下载、一键导出 |
+| App 菜单 | `app/shell.swift` | 「打开控制台日志」优先打开 `logs/console.log`，另加「打开日志目录」 |
+
+设计取舍：
+
+- **控制台日志要落盘**：原来只有启动器的 `/tmp/txlc-dashboard.log`，重启机器即失；现在 `logs/console.log` 是主位置，临时文件只在进程被直接杀掉时才有内容。
+- **id 白名单而不是传路径**：接口入参是清单里发出去的 id，后端映射回路径，避免 `/api/diagnostics/file?path=/etc/passwd` 这类读任意文件。
+- **诊断包不含配置**：`*.conf` 里有内网地址与本机绝对路径，发出去前必须由人确认；包里用 `meta.txt` 说明这一点。
+- **只在点击时汇总**：`/api/diagnostics` 不参与 1 秒轮询，避免每秒扫一遍日志目录。
+- **每文件 512KB 上限**：几十 MB 的服务日志仍能进包，但不会把包撑到几百 MB。
+
 ### 下一步（S3）
 
 P2 的 12、13：把 `devctl.sh` 的核心逻辑迁到 Python（`devctl.py`），并做 Windows 支持（含 Edge/Chrome `--app` 窗口入口）。目标：拿到 Windows 可用的版本，同时让 Go 重写的对照物从 bash 变成可测试的 Python。
