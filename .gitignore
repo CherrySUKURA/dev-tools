@@ -17,6 +17,7 @@ entries.conf
 health.conf
 deps.conf
 maven-settings.xml
+legacy-proxy.conf
 services/
 
 # 与本项目无关的本地技能目录

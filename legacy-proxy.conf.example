@@ -1,0 +1,3 @@
+# 旧系统入口代理（/efarm/**）的 Host 头示例：复制为 legacy-proxy.conf 后改成你的域名。
+# 该文件不入库；不配置时默认用 localhost（只影响旧门户的域名入口校验）。
+example.internal

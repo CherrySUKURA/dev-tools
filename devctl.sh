@@ -46,6 +46,7 @@ projects_conf_field() {
     {
       name=$1; dir=$2; core=$3; jar=$4;
       startcmd=$5; stopcmd=$6; buildcmd=$7; doc=$8; installmod=$9; kindcol=$10;
+      groupcol=$11; dependscol=$12; requirescol=$13;
       gsub(/^[ \t]+|[ \t]+$/, "", name);
       gsub(/^[ \t]+|[ \t]+$/, "", dir);
       gsub(/^[ \t]+|[ \t]+$/, "", core);
@@ -56,6 +57,9 @@ projects_conf_field() {
       gsub(/^[ \t]+|[ \t]+$/, "", doc);
       gsub(/^[ \t]+|[ \t]+$/, "", installmod);
       gsub(/^[ \t]+|[ \t]+$/, "", kindcol);
+      gsub(/^[ \t]+|[ \t]+$/, "", groupcol);
+      gsub(/^[ \t]+|[ \t]+$/, "", dependscol);
+      gsub(/^[ \t]+|[ \t]+$/, "", requirescol);
       if (name == n) {
         if (f == "dir") print dir;
         else if (f == "core") print core;
@@ -66,6 +70,9 @@ projects_conf_field() {
         else if (f == "doc") print doc;
         else if (f == "install") print installmod;
         else if (f == "type") print kindcol;
+        else if (f == "group") print groupcol;
+        else if (f == "depends") print dependscol;
+        else if (f == "requires") print requirescol;
         exit;
       }
     }
@@ -173,9 +180,10 @@ resolve_targets() {
 }
 
 # 端口覆盖配置，避免多个项目默认 8080 冲突；格式：项目名 端口。
+# 同时兼容「项目名|端口」写法：老用户可能按其他配置文件的竖线风格写，不该因此失效。
 port_override() {
   [ -f "$PORTS_CONF" ] || return 0
-  awk -v n="$1" '$1 == n { print $2; exit }' "$PORTS_CONF"
+  awk -F'[|[:space:]]+' -v n="$1" '!/^[[:space:]]*#/ && $1 == n { print $2; exit }' "$PORTS_CONF"
 }
 
 # 优先使用 ports.conf 覆盖，否则从 application.yml 的 server.port 读取默认值。
@@ -892,9 +900,28 @@ file_mtime() {
 }
 
 # 输出 JSON 状态，供 Web 控制台调用。
+# 把逗号分隔的名称列表转成 JSON 数组字符串，空值输出 []。
+# json_status 用它输出 depends/requires，避免前端再拆字符串。
+json_list() {
+  awk -v s="$1" 'BEGIN{
+    n = split(s, a, ",");
+    printf "[";
+    c = 0;
+    for (i = 1; i <= n; i++) {
+      item = a[i];
+      gsub(/^[ \t]+|[ \t]+$/, "", item);
+      if (item == "") continue;
+      if (c++) printf ",";
+      printf "\"%s\"", item;
+    }
+    printf "]";
+  }'
+}
+
 json_status() {
   local first=1 name pid running watch core port doc install_modules project_kind
   local action action_running action_exit action_exit_time start_script stop_script build_script
+  local group depends_json requires_json
   # 默认入口/文档地址用的主机名：默认 localhost，与控制台地址栏保持一致，
   # 纯 127.0.0.1 会被部分后端按 Host 判成非法来源。可用 TXLC_LOCAL_HOST 覆盖。
   local local_host="${TXLC_LOCAL_HOST:-localhost}"
@@ -920,6 +947,10 @@ json_status() {
     start_script="$(projects_conf_field "$name" start)"
     stop_script="$(projects_conf_field "$name" stop)"
     build_script="$(projects_conf_field "$name" build)"
+    # 分组与依赖顺序：老配置没有第 11–13 列时为空，控制台按类型/核心标记推导。
+    group="$(projects_conf_field "$name" group)"
+    depends_json="$(json_list "$(projects_conf_field "$name" depends)")"
+    requires_json="$(json_list "$(projects_conf_field "$name" requires)")"
 
     if pid_alive "$name"; then
       running=true
@@ -949,11 +980,11 @@ json_status() {
       action_exit_time="$(file_mtime "/tmp/$name.action.exit")"
     fi
 
-    printf '{"name":"%s","port":%s,"running":%s,"pid":"%s","watch":%s,"core":%s,"log":"%s","dir":"%s","doc":"%s","action":"%s","action_running":%s,"action_exit":"%s","action_exit_time":%s,"install":"%s","type":"%s","start":"%s","stop":"%s","build":"%s"}' \
+    printf '{"name":"%s","port":%s,"running":%s,"pid":"%s","watch":%s,"core":%s,"log":"%s","dir":"%s","doc":"%s","action":"%s","action_running":%s,"action_exit":"%s","action_exit_time":%s,"install":"%s","type":"%s","start":"%s","stop":"%s","build":"%s","group":"%s","depends":%s,"requires":%s}' \
       "$name" "$port" "$running" "$pid" "$watch" "$core" \
       "$(log_file "$name")" "$(project_dir "$name")" "$doc" \
       "$action" "$action_running" "$action_exit" "$action_exit_time" "$install_modules" "$project_kind" \
-      "$start_script" "$stop_script" "$build_script"
+      "$start_script" "$stop_script" "$build_script" "$group" "$depends_json" "$requires_json"
   done
   printf ']\n'
 }

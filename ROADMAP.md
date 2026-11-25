@@ -6,10 +6,10 @@
 
 | 维度 | 现状 |
 |---|---|
-| 代码规模 | `devctl.sh` 1105 行、`dashboard.py` 2905 行、`dashboard.html` 4058 行 |
-| 已有能力 | 启停/重启/更新、热更新、日志、Git 弹窗（分支/拉取/stash/冲突解决/diff）、项目增删改、端口覆盖、页面入口、前端项目、异步任务 |
-| 技术债 | 没有 git 仓库、没有测试、页面和后端逻辑全挤在单文件里、配置是自定义竖线格式 |
-| 跨平台障碍 | 代码里 **101 处** macOS 专有调用：`lsof`、`open`、`osascript`、`pkill`、`/tmp/`、`.app`、bash 脚本；`services/` 下生成的启动/停止脚本也是 bash |
+| 代码规模 | `devctl.sh` 约 1130 行、`dashboard.py` 约 3300 行、`dashboard.html` 约 4700 行 |
+| 已有能力 | 启停/重启/更新、热更新、日志、Git 弹窗（分支/拉取/stash/冲突解决/diff）、项目增删改、端口覆盖、页面入口、前端项目、异步任务、健康巡检、端口面板、外部依赖闸门、分组与依赖顺序、批量操作与搜索 |
+| 技术债 | 前端仍是单文件、状态仍在临时目录、配置仍是自定义竖线格式、`devctl.sh` 承担进程管理 |
+| 跨平台障碍 | 代码里仍有 macOS 专有调用：`lsof`、`open`、`osascript`、`pkill`、`/tmp/`、`.app`、bash 脚本；`services/` 下生成的启动/停止脚本也是 bash（平台差异已收进 `console_platform.py`，但 `devctl.sh` 尚未迁移） |
 
 结论：功能不算"薄"，薄在**运维闭环**（起得来但崩了没人管、没有中间件托管、没有分组和顺序）和**平台绑定**。
 
@@ -138,3 +138,28 @@
 ### 下一步（S2）
 
 基础设施托管（MySQL/Redis/Nacos）、分组与依赖顺序、批量操作与搜索。这三件决定它能不能从"能启停"变成"能编排"。
+
+### S2 已完成（2026-11-25）
+
+| 交付 | 位置 | 验收方式 |
+|---|---|---|
+| 外部依赖登记与探活 | `deps.conf` + `dashboard.py`：`load_deps_conf` / `probe_dep` / `refresh_deps` / `deps_loop` | `/api/deps` 返回状态与延迟；MySQL/Redis 通、不可达依赖标红 |
+| 启动前依赖闸门 | `dashboard.py`：`dependency_gate` | 单项目启动依赖不通 → `409` + `can_force`；前端确认后可强制启动 |
+| 分组展示与整组启停 | `projects.conf` 第 11 列；页面按组渲染，组头「启动组 / 停止组」 | 17 个项目分到 core / business / portal / frontend 四组 |
+| 依赖顺序编排 | `dashboard.py`：`topo_order` / `start_ordered` / `wait_project_state`；`/api/status.ordered` | 网关在 svc-auth、svc-baseinfo 就绪后才启动；停止反序；阻塞项跳过并记录原因 |
+| 批量操作 | 卡片勾选 + 底部批量条；`/api/action` 接受 `names` + `force` | 勾选多个项目批量启动/停止/重启/更新，进度显示在横幅 |
+| 顶部搜索 | `dashboard.html`：`⌘K` 聚焦、`Esc` 清空 | 按名称/端口/分组/目录过滤，搜索时跨页签 |
+| 单元测试 | `tests/test_deps_and_groups.py`（20 用例） | 依赖解析、探活、闸门、分组展开、拓扑排序（含环） |
+| 配置模板 | `*.conf.example` 全套；真实配置不入库 | 新机器 `cp *.example` 后即可启动 |
+
+设计取舍（S2 写下来避免返工）：
+
+- **不做「本机托管 MySQL/Redis」**：实际依赖在远端，控制台没有 Docker 也不该管它们的生命周期；把力气花在「启动前先告诉你哪个依赖不通」上，收益更高。
+- **闸门不硬拦整组**：整组启动时被依赖挡住的项目跳过并记录原因，其余继续；否则一个坏依赖会让整组停摆。
+- **顺序执行放在 Python 侧**：`devctl start` 只管单个项目，编排需要「等端口就绪再下一个」，还要复用健康状态和依赖检查，放在 `dashboard.py` 里更好测试。
+- **等待用实时状态**：`wait_project_state` 每轮直读 `devctl json`，不复用 1 秒 SWR 缓存，避免「刚启动」被误判为已就绪。
+- **`ports.conf` 同时兼容空白与 `|`**：老文件是空白分隔，文档曾写成竖线，两种都接受，避免因分隔符失效。
+
+### 下一步（S3）
+
+P2 的 12、13：把 `devctl.sh` 的核心逻辑迁到 Python（`devctl.py`），并做 Windows 支持。目标：拿到 Windows 可用的版本，同时让 Go 重写的对照物从 bash 变成可测试的 Python。

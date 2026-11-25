@@ -1183,6 +1183,89 @@
   .log-line mark { padding: 0 1px; color: #111827; background: #fde68a; border-radius: 2px; }
   .log-line.level-hidden { display: none; }
 
+  /* ---------- 搜索 / 分组 / 批量选择 / 外部依赖 ---------- */
+  .header-search {
+    width: 210px;
+    padding: 7px 10px;
+    font-size: 13px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 9px;
+  }
+  .header-search::placeholder { color: rgba(255, 255, 255, 0.55); }
+  .header-search:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.55);
+  }
+  @media (max-width: 980px) { .header-search { width: 130px; } }
+
+  .group-block { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+  .group-head { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+  .group-title { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; color: var(--muted); }
+  .group-count {
+    padding: 1px 7px;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+  }
+  .group-actions { display: flex; gap: 4px; margin-left: auto; }
+  .group-empty { padding: 28px 16px; color: var(--muted); text-align: center; }
+
+  /* 卡片左上角的选择框：只用于批量操作，平时不占视觉重心。 */
+  .card-check { display: flex; align-items: center; padding-right: 2px; }
+  .card-check input { width: 15px; height: 15px; cursor: pointer; accent-color: var(--brand); }
+  .card.is-selected .card-face { box-shadow: inset 0 0 0 2px var(--brand); }
+
+  /* 底部悬浮批量操作条：有选中项才出现。 */
+  .batch-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    z-index: 40;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    box-shadow: var(--shadow-md);
+    transform: translateX(-50%);
+  }
+  .batch-count { font-size: 13px; font-weight: 600; white-space: nowrap; }
+
+  /* 按依赖顺序执行的进度条 */
+  .ordered-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 9px 12px;
+    font-size: 13px;
+    background: var(--brand-soft);
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+  }
+  .ordered-banner.is-done { background: var(--surface-soft); border-color: var(--line); }
+  .ordered-banner.is-failed { background: var(--amber-bg); border-color: #fcd34d; }
+  .ordered-banner .link-btn { margin-left: auto; }
+
+  .deps-table td.state-ok { color: var(--green); font-weight: 600; }
+  .deps-table td.state-bad { color: var(--red); font-weight: 600; }
+  .deps-uses { color: var(--muted); font-size: 12px; }
+  /* 有依赖不通时，顶栏的“依赖”按钮变红，避免用户以为一切正常。 */
+  .btn.ghost.is-bad {
+    color: #fecaca;
+    background: rgba(220, 38, 38, 0.18);
+    border-color: rgba(248, 113, 113, 0.7);
+  }
+
   /* ---------- 设置弹窗里的健康检查分组 ---------- */
   .settings-section { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
   .settings-section h4 { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
@@ -1207,11 +1290,14 @@
     </div>
   </div>
   <div class="global-actions">
+    <input id="search-input" class="header-search" type="search" placeholder="搜索项目 / 端口 / 分组   ⌘K"
+           oninput="onSearchInput()" onkeydown="onSearchKey(event)" title="⌘K 聚焦，Esc 清空">
     <button class="btn primary" onclick="openAddProject()">添加项目</button>
     <button id="btn-start-core" class="btn primary" onclick="runFastAction('start','core')">启动核心项目</button>
     <button id="btn-update-all" class="btn" onclick="runAction('update','all')">更新全部</button>
     <button id="btn-stop-all" class="btn danger" onclick="runFastAction('stop','all')">停止全部</button>
     <button class="btn ghost" onclick="openPorts()">端口</button>
+    <button id="btn-deps" class="btn ghost" onclick="openDeps()" title="查看 MySQL / Redis 等外部依赖">依赖 <span id="deps-badge">…</span></button>
     <button class="btn ghost" onclick="loadStatus(true)">刷新</button>
     <button id="btn-reload" class="btn warn hidden" onclick="location.reload()" title="控制台文件已更新，刷新后使用新版本">控制台已更新，点击刷新</button>
     <button class="btn ghost" onclick="shutdownPanel()">关闭控制台</button>
@@ -1240,6 +1326,13 @@
       <span class="summary-muted" id="last-refresh"></span>
     </div>
   </section>
+
+  <!-- 按依赖顺序执行的进度：批量启动/停止或启动整组时出现。 -->
+  <div id="ordered-banner" class="ordered-banner hidden">
+    <span id="ordered-spinner" class="spinner"></span>
+    <span id="ordered-text"></span>
+    <button id="ordered-close" class="link-btn hidden" onclick="dismissOrdered()">知道了</button>
+  </div>
 
   <!-- 后端服务 / 前端项目用 tab 切换，避免两类项目混在一起。 -->
   <div class="list-tabs" role="tablist" aria-label="项目类型">
@@ -1664,6 +1757,36 @@
   </div>
 </div>
 
+<!-- 外部依赖面板：MySQL / Redis 这类不归控制台管、但服务启动前必须能连上的中间件。 -->
+<div id="deps-panel" class="log-overlay hidden" onclick="if (event.target === this) hideDeps()">
+  <div class="log-modal" role="dialog" aria-modal="true" aria-labelledby="deps-title">
+    <div class="panel-head log-head">
+      <div class="log-heading">
+        <strong id="deps-title">外部依赖</strong>
+        <span id="deps-count" class="meta-chip">0 个</span>
+      </div>
+      <div class="log-tools">
+        <button class="btn ghost small" onclick="loadDeps(true)">重新探活</button>
+        <button class="btn ghost small" onclick="hideDeps()">关闭</button>
+      </div>
+    </div>
+    <div class="git-body">
+      <p class="ports-hint">这些是服务运行必须能连上的远程依赖（登记在 deps.conf）。启动项目前会自动检查，不通时会拒绝启动并提示原因。</p>
+      <div id="deps-body"><div class="ports-empty">正在探活…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 批量操作条：卡片多选后出现，固定在底部。 -->
+<div id="batch-bar" class="batch-bar hidden">
+  <span id="batch-count" class="batch-count">已选 0 个</span>
+  <button class="btn primary small" onclick="runBatch('start')">启动</button>
+  <button class="btn danger small" onclick="runBatch('stop')">停止</button>
+  <button class="btn small" onclick="runBatch('restart')">重启</button>
+  <button class="btn small" onclick="runBatch('update')">更新</button>
+  <button class="btn ghost small" onclick="clearSelection()">清空</button>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
@@ -1711,6 +1834,11 @@ const state = {
   logLevel: "all", // 日志级别过滤：all | error | warn
   portsData: null, // 端口面板数据
   portsTimer: null, // 端口面板打开时的自动刷新定时器
+  search: "", // 顶部搜索关键字（匹配名称/端口/分组）
+  selected: {}, // 批量选择：项目名 -> true
+  deps: [], // 外部依赖探活结果
+  ordered: null, // 按依赖顺序执行的编排任务进度
+  orderedDismissed: "", // 已手动关闭的编排任务 id，避免完成提示一直挂着
 };
 
 const $ = (id) => document.getElementById(id);
@@ -1772,9 +1900,34 @@ function pendingLabel(action) {
   })[action] || "处理中";
 }
 
+// 分组推导必须和 dashboard.py 的 project_group 保持一致，
+// 否则 group:xx 的「启动组」会算到不同的项目上。
+function projectGroup(p) {
+  if (p.group) return p.group;
+  if (p.type === "frontend") return "frontend";
+  if (p.core) return "core";
+  return "business";
+}
+
+const GROUP_LABELS = {
+  core: "核心服务",
+  business: "业务服务",
+  portal: "门户应用",
+  infra: "基础设施",
+  frontend: "前端项目",
+};
+
+function groupLabel(key) {
+  return GROUP_LABELS[key] || key;
+}
+
 function targetNames(target) {
   if (target === "all") return state.projects.map((p) => p.name);
   if (target === "core") return state.projects.filter((p) => p.core).map((p) => p.name);
+  if (String(target).startsWith("group:")) {
+    const wanted = String(target).slice(6);
+    return state.projects.filter((p) => projectGroup(p) === wanted).map((p) => p.name);
+  }
   return [target];
 }
 
@@ -1855,7 +2008,19 @@ async function loadStatus(showToast = false) {
     state.localHost = data.local_host || state.localHost;
     state.activeJob = data.active_job || null;
     state.busy = !!(state.activeJob && state.activeJob.status === "running");
+    // 外部依赖与编排进度：由后端每 15 秒 / 每个任务更新，这里只负责展示。
+    state.deps = data.deps || [];
+    state.ordered = data.ordered || null;
 
+    // 项目被删除后清掉残留的选中项，避免批量操作提交不存在的项目。
+    const knownNames = new Set(state.projects.map((p) => p.name));
+    Object.keys(state.selected).forEach((name) => {
+      if (!knownNames.has(name)) delete state.selected[name];
+    });
+
+    renderDepsBadge();
+    renderOrdered();
+    updateBatchBar();
     // 热更新操作成功后的短暂覆盖，避免状态缓存把按钮翻回旧状态。
     Object.keys(state.watchOverride).forEach((name) => {
       const override = state.watchOverride[name];
@@ -2018,24 +2183,40 @@ function renderProjects() {
       p.git ? [p.git.ok, p.git.branch, p.git.dirty, p.git.ahead, p.git.behind] : null,
       p.install || "",
       p.type || "backend",
+      p.group || "",
+      (p.depends || []).join(","),
+      (p.requires || []).join(","),
       p.health ? [p.health.state, p.health.restarts, p.health.failures, p.health.auto_restart] : null,
     ]),
     pending: Object.keys(state.pending).sort().map((name) => [name, state.pending[name]]),
+    selected: Object.keys(state.selected).sort(),
+    search: state.search,
     busy: state.busy,
   });
   if (signature === state.lastRenderSignature) return;
   state.lastRenderSignature = signature;
 
   const container = $("projects");
+  const keyword = state.search.trim().toLowerCase();
+
+  // 搜索匹配名称、端口、分组、目录；有关键字时跨页签显示，避免用户找不到项目。
+  const matchesKeyword = (p) => {
+    if (!keyword) return true;
+    return String(p.name).toLowerCase().includes(keyword)
+      || String(p.port || "").includes(keyword)
+      || projectGroup(p).toLowerCase().includes(keyword)
+      || String(p.dir || "").toLowerCase().includes(keyword);
+  };
+  const matched = state.projects.filter(matchesKeyword);
 
   const groups = [
     {
       key: "backend", empty: "还没有后端服务，点右上角“添加项目”选择后端 Java 服务。",
-      items: state.projects.filter((p) => p.type !== "frontend"),
+      items: matched.filter((p) => p.type !== "frontend"),
     },
     {
       key: "frontend", empty: "还没有前端项目，点右上角“添加项目”选择前端 Node 项目。",
-      items: state.projects.filter((p) => p.type === "frontend"),
+      items: matched.filter((p) => p.type === "frontend"),
     },
   ];
 
@@ -2059,14 +2240,48 @@ function renderProjects() {
 
   const activeGroup = groups.find((group) => group.key === state.listTab) || groups[0];
   container.innerHTML = "";
-  if (!activeGroup.items.length) {
+  // 搜索时不受页签限制：后端和前端的结果一起按分组展示。
+  const visible = keyword ? matched : activeGroup.items;
+
+  if (!visible.length) {
     const empty = document.createElement("div");
     empty.className = "group-empty";
-    empty.textContent = activeGroup.empty;
+    empty.textContent = keyword ? "没有匹配的项目，换个关键字试试。" : activeGroup.empty;
     container.appendChild(empty);
   }
 
-  activeGroup.items.forEach((p) => {
+  // 先按固定顺序建好分组骨架，再往里填卡片，避免顺序随加载变化。
+  const GROUP_ORDER = ["core", "business", "portal", "infra", "frontend"];
+  const groupGrids = {};
+  const groupKeys = [...new Set(visible.map((p) => projectGroup(p)))].sort((a, b) => {
+    const ia = GROUP_ORDER.indexOf(a);
+    const ib = GROUP_ORDER.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  groupKeys.forEach((key) => {
+    // 分组名来自配置，出现在 onclick 字符串里，先收敛成安全字符。
+    const safeKey = String(key).replace(/[^A-Za-z0-9._-]/g, "");
+    const items = visible.filter((p) => projectGroup(p) === key);
+    const block = document.createElement("section");
+    block.className = "group-block";
+    const head = document.createElement("div");
+    head.className = "group-head";
+    head.innerHTML = `
+      <h3 class="group-title">${escapeHtml(groupLabel(key))}</h3>
+      <span class="group-count">${items.length}</span>
+      <span class="group-actions">
+        <button class="link-btn" onclick="runFastAction('start','group:${safeKey}')">启动组</button>
+        <button class="link-btn" onclick="runFastAction('stop','group:${safeKey}')">停止组</button>
+      </span>`;
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    block.appendChild(head);
+    block.appendChild(grid);
+    container.appendChild(block);
+    groupGrids[key] = grid;
+  });
+
+  visible.forEach((p) => {
     // 只根据本地点击显示 loading；状态接口负责清理和校准。
     const pending = state.pending[p.name];
     // 健康状态：ok=绿、degraded=黄（还在观察）、down=红（连续失败，可能已自动重启）。
@@ -2074,8 +2289,10 @@ function renderProjects() {
     const health = p.health || {};
     const healthState = health.state || "unknown";
     const card = document.createElement("article");
+    card.dataset.name = p.name;
     card.className = "card" + (p.running ? " is-running" : "") + (pending ? " is-pending" : "")
       + (p.running && healthState === "down" ? " is-down" : "")
+      + (state.selected[p.name] ? " is-selected" : "")
       + (state.flipped[p.name] ? " flipped" : "");
 
     const badges = [];
@@ -2179,6 +2396,9 @@ function renderProjects() {
       <div class="card-flip">
         <div class="card-face card-front">
           <div class="card-head">
+            <label class="card-check" title="选择此项目（批量操作）">
+              <input type="checkbox" data-select="${escapeHtml(p.name)}" ${state.selected[p.name] ? "checked" : ""}>
+            </label>
             <div class="service-name">
               <span class="status-dot${dotClass}"></span>
               <h2>${escapeHtml(p.name)}</h2>
@@ -2213,7 +2433,7 @@ function renderProjects() {
         </div>
       </div>
     `;
-    container.appendChild(card);
+    groupGrids[projectGroup(p)].appendChild(card);
   });
 
   container.querySelectorAll("button[data-action]").forEach((btn) => {
@@ -2228,6 +2448,11 @@ function renderProjects() {
       else if (action === "flip") toggleCardFlip(btn, target);
       else runAction(action, target);
     });
+  });
+
+  // 批量选择：只切换当前卡片的高亮，不整页重建，避免复选框失焦。
+  container.querySelectorAll("input[data-select]").forEach((box) => {
+    box.addEventListener("change", () => toggleSelect(box.dataset.select, box.checked));
   });
 
   // 背面入口放不下时，在标题上标一句“滚动查看”，否则只看得到前两个会以为丢了。
@@ -2253,6 +2478,9 @@ async function runFastAction(action, target) {
   if (target === "all" && action === "stop") {
     if (!confirm("停止所有已启动的项目？")) return;
   }
+  if (String(target).startsWith("group:") && action === "stop") {
+    if (!confirm(`停止「${groupLabel(String(target).slice(6))}」里已启动的项目？`)) return;
+  }
 
   const names = pendingNames(action, target);
   if (!names.length) {
@@ -2277,6 +2505,43 @@ async function runFastAction(action, target) {
     toast(data.message || "操作已提交");
     scheduleFastPoll();
   } catch (e) {
+    const info = e.data || {};
+    // 依赖不通：后端拒绝启动，并把原因带回来。允许用户确认后强制启动。
+    if (info.can_force) {
+      names.forEach((name) => {
+        delete state.pending[name];
+        delete state.pendingSince[name];
+      });
+      renderProjects();
+      if (!confirm(`${e.message}\n\n仍要强制启动吗？`)) {
+        updateGlobalButtons();
+        return;
+      }
+      names.forEach((name) => {
+        state.pending[name] = action;
+        state.pendingSince[name] = Date.now();
+      });
+      renderProjects();
+      try {
+        const forced = await api("/api/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: action + "-bg", target, force: true }),
+        });
+        toast(forced.message || "已强制提交");
+        scheduleFastPoll();
+      } catch (e2) {
+        names.forEach((name) => {
+          delete state.pending[name];
+          delete state.pendingSince[name];
+        });
+        renderProjects();
+        updateGlobalButtons();
+        toast(e2.message, true);
+      }
+      return;
+    }
+
     names.forEach((name) => {
       delete state.pending[name];
       delete state.pendingSince[name];
@@ -4463,6 +4728,224 @@ async function shutdownPanel() {
   } catch (e) {
     toast(e.message, true);
   }
+}
+
+// ---------------------------------------------------------------
+// 顶部搜索：本地过滤，⌘K / Ctrl+K 聚焦，Esc 清空
+// ---------------------------------------------------------------
+function onSearchInput() {
+  state.search = $("search-input").value || "";
+  state.lastRenderSignature = ""; // 本地过滤，强制重画
+  renderProjects();
+}
+
+function onSearchKey(event) {
+  if (event.key !== "Escape") return;
+  $("search-input").value = "";
+  onSearchInput();
+  $("search-input").blur();
+}
+
+document.addEventListener("keydown", (event) => {
+  if (!(event.metaKey || event.ctrlKey) || String(event.key).toLowerCase() !== "k") return;
+  event.preventDefault();
+  const input = $("search-input");
+  if (input) {
+    input.focus();
+    input.select();
+  }
+});
+
+// ---------------------------------------------------------------
+// 批量选择与批量操作
+// ---------------------------------------------------------------
+function toggleSelect(name, checked) {
+  if (checked) state.selected[name] = true;
+  else delete state.selected[name];
+  // 只切换当前卡片的高亮，不整页重建，避免复选框失焦。
+  const card = document.querySelector(`.card[data-name="${CSS.escape(name)}"]`);
+  if (card) card.classList.toggle("is-selected", !!checked);
+  updateBatchBar();
+}
+
+function clearSelection() {
+  state.selected = {};
+  state.lastRenderSignature = "";
+  updateBatchBar();
+  renderProjects();
+}
+
+function updateBatchBar() {
+  const bar = $("batch-bar");
+  if (!bar) return;
+  const count = Object.keys(state.selected).length;
+  bar.classList.toggle("hidden", count === 0);
+  const label = $("batch-count");
+  if (label) label.textContent = `已选 ${count} 个`;
+}
+
+async function runBatch(action) {
+  const names = Object.keys(state.selected);
+  if (!names.length) return;
+  if (action === "stop" && !confirm(`停止选中的 ${names.length} 个项目？`)) return;
+
+  // 启停走异步 wrapper，接口立即返回；更新走任务队列，避免并发构建抢同一目录。
+  const apiAction = action === "update" ? "update" : action + "-bg";
+  const label = labelAction(action);
+  names.forEach((name) => {
+    state.pending[name] = action;
+    state.pendingSince[name] = Date.now();
+  });
+  renderProjects();
+  scheduleFastPoll();
+
+  try {
+    const data = await api("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: apiAction, names }),
+    });
+    toast(data.message || `已提交 ${names.length} 个项目的${label}`);
+    clearSelection();
+    scheduleFastPoll();
+    loadStatus();
+  } catch (e) {
+    const info = e.data || {};
+    names.forEach((name) => {
+      delete state.pending[name];
+      delete state.pendingSince[name];
+    });
+    renderProjects();
+    // 依赖不通时允许强制启动，和单个启动保持一致。
+    if (info.can_force && action === "start" && confirm(`${e.message}\n\n仍要强制启动吗？`)) {
+      try {
+        const forced = await api("/api/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: apiAction, names, force: true }),
+        });
+        toast(forced.message || "已强制提交");
+        clearSelection();
+        scheduleFastPoll();
+        return;
+      } catch (e2) {
+        toast(e2.message, true);
+        return;
+      }
+    }
+    toast(e.message, true);
+  }
+}
+
+// ---------------------------------------------------------------
+// 外部依赖面板
+// ---------------------------------------------------------------
+function openDeps() {
+  $("deps-panel").classList.remove("hidden");
+  loadDeps(false);
+}
+
+function hideDeps() {
+  $("deps-panel").classList.add("hidden");
+}
+
+async function loadDeps(refresh) {
+  const body = $("deps-body");
+  if (body) body.innerHTML = '<div class="ports-empty">正在探活…</div>';
+  try {
+    const data = await api("/api/deps" + (refresh ? "?refresh=1" : ""));
+    state.deps = data.deps || [];
+    renderDepsBadge();
+    renderDeps(state.deps);
+  } catch (e) {
+    if (body) body.innerHTML = `<div class="ports-empty">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderDepsBadge() {
+  const badge = $("deps-badge");
+  if (!badge) return;
+  const deps = state.deps || [];
+  if (!deps.length) {
+    badge.textContent = "未登记";
+    return;
+  }
+  const ok = deps.filter((item) => item.ok).length;
+  badge.textContent = `${ok}/${deps.length}`;
+  const btn = $("btn-deps");
+  if (btn) btn.classList.toggle("is-bad", ok < deps.length);
+}
+
+function renderDeps(deps) {
+  const body = $("deps-body");
+  if (!body) return;
+  const count = $("deps-count");
+  if (count) count.textContent = `${deps.length} 个`;
+  if (!deps.length) {
+    body.innerHTML = '<div class="ports-empty">还没有登记外部依赖。在 deps.conf 里按「名称|类型|地址|端口|说明」添加。</div>';
+    return;
+  }
+  const rows = deps.map((dep) => {
+    const users = state.projects
+      .filter((p) => (p.requires || []).includes(dep.name))
+      .map((p) => p.name);
+    const latency = dep.ok && dep.latency_ms != null ? ` · ${dep.latency_ms}ms` : "";
+    return `<tr>
+      <td class="${dep.ok ? "state-ok" : "state-bad"}">${dep.ok ? "正常" : "不通"}</td>
+      <td class="mono">${escapeHtml(dep.name)}</td>
+      <td class="mono">${escapeHtml(dep.host)}:${escapeHtml(dep.port)}</td>
+      <td>${escapeHtml(String(dep.kind || "tcp").toUpperCase())}${latency}</td>
+      <td class="deps-uses">${users.length ? escapeHtml(users.join(", ")) : "未被项目引用"}</td>
+      <td>${dep.ok ? escapeHtml(dep.desc || "") : `<span class="deps-hint-bad">${escapeHtml(dep.error || "不可用")}</span>`}</td>
+    </tr>`;
+  }).join("");
+  body.innerHTML = `<table class="ports-table deps-table">
+    <thead><tr><th>状态</th><th>名称</th><th>地址</th><th>类型 / 延迟</th><th>被谁依赖</th><th>说明</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ---------------------------------------------------------------
+// 按依赖顺序执行的进度（批量启动 / 启动整组 / 停止全部）
+// ---------------------------------------------------------------
+function renderOrdered() {
+  const banner = $("ordered-banner");
+  if (!banner) return;
+  const task = state.ordered;
+  if (!task || task.id === state.orderedDismissed) {
+    banner.classList.add("hidden");
+    return;
+  }
+  const total = (task.order || []).length;
+  const failed = (task.failed || []).length;
+  const skipped = (task.skipped || []).length;
+  const finished = (task.done || []).length + failed + skipped;
+  const running = task.status === "running";
+  const label = labelAction(task.action);
+
+  banner.classList.remove("hidden");
+  banner.classList.toggle("is-done", !running);
+  banner.classList.toggle("is-failed", !running && failed > 0);
+  $("ordered-spinner").classList.toggle("hidden", !running);
+  $("ordered-close").classList.toggle("hidden", running);
+
+  let text = running
+    ? `${label}中：${finished}/${total}${task.current ? ` · 正在处理 ${task.current}` : ""}`
+    : `${label}完成：${finished}/${total}`;
+  if (skipped) text += ` · 跳过 ${skipped} 个`;
+  if (failed) text += ` · 失败 ${failed} 个`;
+  $("ordered-text").textContent = text;
+
+  // 悬停看细节：跳过原因（多为依赖不通）和失败项目。
+  const details = [];
+  (task.skipped || []).forEach((item) => details.push(`跳过 ${item.name}：${item.reason}`));
+  if (failed) details.push(`失败：${(task.failed || []).join(", ")}`);
+  banner.title = details.join("\n");
+}
+
+function dismissOrdered() {
+  state.orderedDismissed = state.ordered ? state.ordered.id : "";
+  renderOrdered();
 }
 
 // 冲突面板的按钮用事件委托绑定一次；面板内容是每次渲染重建的，不能在上面直接绑 onclick。

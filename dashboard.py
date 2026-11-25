@@ -49,13 +49,45 @@ LOCAL_HOST = (os.environ.get("TXLC_LOCAL_HOST") or "localhost").strip() or "loca
 # 让 txlcsystem 的域名入口校验（sub_entry_info）在 127.0.0.1 本地也能通过。
 LEGACY_PROXY_PREFIXES = ("/efarm",)
 LEGACY_PROXY_TARGET = ("127.0.0.1", 8080)
-LEGACY_PROXY_HOST_HEADER = os.environ.get("TXLC_LEGACY_PROXY_HOST", "test.nfcpwl.com")
+LEGACY_PROXY_HOST_HEADER = (os.environ.get("TXLC_LEGACY_PROXY_HOST") or "").strip()
+
+
+def legacy_proxy_host():
+    """旧系统入口代理用的 Host 头。
+
+    优先级：环境变量 TXLC_LEGACY_PROXY_HOST → legacy-proxy.conf 第一行有效内容 → localhost。
+    真实域名属于公司内部信息，不写进代码；放到 gitignore 的 legacy-proxy.conf 里，
+    换机器时补一行即可，不影响其他项目。
+    """
+    if LEGACY_PROXY_HOST_HEADER:
+        return LEGACY_PROXY_HOST_HEADER
+    conf = BASE_DIR / "legacy-proxy.conf"
+    try:
+        for line in conf.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                return line
+    except OSError:
+        pass
+    return "localhost"
 
 HEALTH_CONF = BASE_DIR / "health.conf"
+# 外部依赖登记表：MySQL / Redis 这类不在本机、又不归控制台管的中间件。
+DEPS_CONF = BASE_DIR / "deps.conf"
 HEALTH_EVAL_EVERY = 2.0      # 健康检查线程的调度粒度（秒）
 HEALTH_RESTART_COOLDOWN = 20.0  # 同一次自动重启后的冷却时间，避免连续重启打爆机器
 HEALTH_RECOVER_RESET = 60.0  # 健康状态持续正常多久后，把重启次数预算还回去
 HEALTH_START_GRACE = 90.0   # 启动/重启后多少秒内不判故障（Spring Boot 冷启动可能很久）
+DEPS_REFRESH_EVERY = 15.0   # 外部依赖探活周期（秒）
+
+# 外部依赖状态：名称 -> {name, kind, host, port, desc, ok, latency_ms, error, checked}
+dep_state = {}
+dep_lock = threading.Lock()
+deps_refreshing = False
+
+# 按依赖顺序执行的编排任务；同一时刻只允许一个，进度通过 /api/status 暴露。
+ordered_task = None
+ordered_lock = threading.Lock()
 
 # 健康状态：项目名 -> {state, failures, restarts, last_check, last_ok, last_error, restart_at}
 health_state = {}
@@ -2097,9 +2129,38 @@ def project_names():
     return {p["name"] for p in get_projects()}
 
 
+def read_projects_fresh():
+    """绕过状态缓存，直接跑一次 devctl json。
+
+    为什么需要：按依赖顺序推进时要判断「上一个项目是否真的起来了」，
+    用缓存可能拿到几秒前的旧状态，导致提前宣布成功或提前放弃。
+    只在编排任务里调用，频率很低，不担心多跑 lsof。
+    """
+    code, out, err = run_devctl(["json"], timeout=20)
+    if code != 0:
+        return None
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        return None
+
+
+def invalidate_status_cache():
+    """让下一次 /api/status 重新读 devctl，而不是返回旧快照。"""
+    with status_cache_lock:
+        status_cache["data"] = None
+        status_cache["time"] = 0.0
+        status_cache["refreshing"] = False
+
+
 def valid_target(target):
-    """动作目标只允许 all/core 或实际存在的项目名，避免命令注入。"""
-    return target in ("all", "core") or target in project_names()
+    """动作目标只允许 all / core / group:xx / 实际存在的项目名，避免命令注入。"""
+    if target in ("all", "core"):
+        return True
+    if target.startswith("group:"):
+        wanted = target.split(":", 1)[1]
+        return any(project_group(p) == wanted for p in get_projects())
+    return target in project_names()
 
 
 def tail_file(path, lines):
@@ -2262,6 +2323,302 @@ def attach_health(projects):
             "max_restarts": settings["max_restarts"],
         })
     return projects
+
+
+# ---------------------------------------------------------------
+# 外部依赖（MySQL / Redis / Nacos 等）
+#
+# 背景：被管理的 Java 服务不自带数据库和缓存，依赖多在内网其他机器上。
+# 依赖不通时 Spring 会等到连接超时才报错（可能几分钟），期间看起来像在正常启动。
+# 这里在启动前先探活，把「哪个依赖不通」提前告诉用户。
+#
+# deps.conf 格式（一行一个依赖）：
+#   名称|类型(tcp/http)|地址|端口|说明
+# 项目与依赖的关联在 projects.conf 第 13 列（requires）。
+# ---------------------------------------------------------------
+
+def load_deps_conf():
+    """解析 deps.conf，返回依赖定义列表；文件不存在时返回空列表。"""
+    if not DEPS_CONF.exists():
+        return []
+    rows = []
+    for raw in DEPS_CONF.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) < 4 or not parts[0] or not parts[2]:
+            continue
+        kind = (parts[1] or "tcp").lower()
+        if kind not in ("tcp", "http"):
+            kind = "tcp"
+        rows.append({
+            "name": parts[0],
+            "kind": kind,
+            "host": parts[2],
+            "port": parts[3],
+            "desc": parts[4] if len(parts) > 4 else "",
+        })
+    return rows
+
+
+def probe_dep(dep, timeout=2.5):
+    """探活单个依赖，返回 (是否可用, 延迟毫秒, 错误说明)。
+
+    tcp：只建立 TCP 连接（MySQL/Redis 用这个，不引入驱动，也不会往对方发协议数据）
+    http：GET 一次，任何 HTTP 响应都算服务活着（401/404 说明端口上确实有服务）
+    """
+    started = time.time()
+    host = dep["host"]
+    try:
+        port = int(dep["port"])
+    except (TypeError, ValueError):
+        return False, 0, "端口未配置"
+
+    if dep["kind"] == "http":
+        url = f"http://{host}:{port}/"
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                return True, int((time.time() - started) * 1000), f"HTTP {resp.status}"
+        except urllib.error.HTTPError as exc:
+            # 有 HTTP 状态码说明服务在响应，只是这个路径不一定对。
+            return True, int((time.time() - started) * 1000), f"HTTP {exc.code}"
+        except Exception as exc:  # noqa: BLE001 - 探活失败原因很多，统一转成提示
+            return False, int((time.time() - started) * 1000), str(exc) or "连接失败"
+
+    ok = plat.port_open(port, host=host, timeout=timeout)
+    latency = int((time.time() - started) * 1000)
+    return ok, latency, "" if ok else f"{host}:{port} 连接失败"
+
+
+def refresh_deps():
+    """重新探活所有登记的外部依赖，结果写入 dep_state。"""
+    global deps_refreshing
+    with dep_lock:
+        deps_refreshing = True
+    try:
+        results = {}
+        for dep in load_deps_conf():
+            ok, latency, error = probe_dep(dep)
+            item = dict(dep)
+            item.update({
+                "ok": ok,
+                "latency_ms": latency,
+                "error": error,
+                "checked": time.time(),
+            })
+            results[dep["name"]] = item
+        with dep_lock:
+            dep_state.clear()
+            dep_state.update(results)
+        return results
+    finally:
+        with dep_lock:
+            deps_refreshing = False
+
+
+def deps_snapshot(trigger=False):
+    """返回依赖状态快照；首次请求时后台触发一次探活，不阻塞页面。"""
+    global deps_refreshing
+    with dep_lock:
+        snapshot = [dict(item) for item in dep_state.values()]
+        need_refresh = bool(trigger and not snapshot and not deps_refreshing)
+        if need_refresh:
+            deps_refreshing = True
+    if need_refresh:
+        threading.Thread(target=refresh_deps, daemon=True).start()
+    return sorted(snapshot, key=lambda item: item["name"])
+
+
+def deps_loop():
+    """后台依赖巡检：独立于项目健康检查，避免慢依赖拖累服务探活。"""
+    while True:
+        try:
+            refresh_deps()
+        except Exception:  # noqa: BLE001 - 巡检线程不能因单次异常退出
+            pass
+        time.sleep(DEPS_REFRESH_EVERY)
+
+
+def project_group(project):
+    """项目的展示分组：配置了就用配置，否则按类型 / 核心标记推导。"""
+    group = (project.get("group") or "").strip()
+    if group:
+        return group
+    if project.get("type") == "frontend":
+        return "frontend"
+    if project.get("core"):
+        return "core"
+    return "business"
+
+
+def dependency_gate(project):
+    """启动前检查项目声明的必需外部依赖。
+
+    返回 {blocked, down, message}；blocked=True 表示应拒绝启动（除非用户强制）。
+    """
+    requires = [item for item in (project.get("requires") or []) if item]
+    if not requires:
+        return {"blocked": False, "down": [], "message": ""}
+    snapshot = {item["name"]: item for item in deps_snapshot(trigger=True)}
+    down = []
+    for name in requires:
+        item = snapshot.get(name)
+        if item is None:
+            down.append({"name": name, "error": "deps.conf 中没有登记"})
+        elif not item.get("ok"):
+            down.append({"name": name, "error": item.get("error") or "不可用"})
+    if not down:
+        return {"blocked": False, "down": [], "message": ""}
+    detail = "；".join(f"{item['name']}（{item['error']}）" for item in down)
+    return {
+        "blocked": True,
+        "down": down,
+        "message": f"外部依赖不可用：{detail}。可先在依赖面板确认，或强制启动。",
+    }
+
+
+def expand_target(target, names=None):
+    """把 target（all / core / group:xx / 项目名）或 names 列表解析成项目名列表。"""
+    projects = get_projects()
+    known = [p["name"] for p in projects]
+    if names:
+        wanted = {str(item) for item in names}
+        return [name for name in known if name in wanted]
+    if target == "all":
+        return known
+    if target == "core":
+        return [p["name"] for p in projects if p.get("core")]
+    if target.startswith("group:"):
+        wanted_group = target.split(":", 1)[1]
+        return [p["name"] for p in projects if project_group(p) == wanted_group]
+    return [target] if target in known else []
+
+
+def topo_order(names, projects):
+    """按 depends 做拓扑排序，依赖排在前；依赖不在本次范围内就忽略。
+
+    深度优先：先访问依赖再输出自己。遇到环时跳过回边，保证不死循环。
+    """
+    wanted = list(dict.fromkeys(names))
+    by_name = {p["name"]: p for p in projects}
+    result, done, visiting = [], set(), set()
+
+    def visit(name):
+        if name in done or name not in by_name:
+            return
+        if name in visiting:
+            return  # 环：忽略这条边
+        visiting.add(name)
+        for dep in by_name[name].get("depends") or []:
+            if dep in by_name and dep in wanted:
+                visit(dep)
+        visiting.discard(name)
+        done.add(name)
+        result.append(name)
+
+    for name in wanted:
+        visit(name)
+    return result
+
+
+def wait_project_state(name, want_running, timeout):
+    """等某个项目进入目标状态（运行/停止），供按依赖顺序推进时使用。
+
+    每轮都读实时状态而不是缓存：SWR 缓存可能滞后几秒，
+    会让「刚启动」被误判为已就绪，或「刚停止」被误判为还在跑。
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        projects = read_projects_fresh()
+        if projects is None:
+            time.sleep(1.5)
+            continue
+        project = next((p for p in projects if p["name"] == name), None)
+        if project is None:
+            return False
+        if bool(project.get("running")) == want_running:
+            invalidate_status_cache()
+            return True
+        time.sleep(1.5)
+    return False
+
+
+def ordered_snapshot():
+    """编排任务快照，给 /api/status 用。"""
+    with ordered_lock:
+        return dict(ordered_task) if ordered_task else None
+
+
+def start_ordered(action, names, force=False):
+    """按依赖顺序依次执行启停，进度写入 ordered_task 供前端轮询。
+
+    为什么不在 devctl 里一次做完：顺序启动必须「等上一个端口就绪」才能继续，
+    而 devctl 的 start 只负责单个项目；放这里还能复用健康状态与依赖检查。
+    """
+    global ordered_task
+    projects = get_projects()
+    order = topo_order(names, projects)
+    if action == "stop":
+        order = list(reversed(order))
+    if not order:
+        return {"ok": True, "message": "没有需要处理的项目", "names": []}
+
+    with ordered_lock:
+        if ordered_task and ordered_task.get("status") == "running":
+            return {"ok": False, "error": "已有编排任务在执行，请等待完成"}
+        task = {
+            "id": uuid.uuid4().hex[:8],
+            "action": action,
+            "order": order,
+            "done": [],
+            "skipped": [],
+            "failed": [],
+            "current": "",
+            "status": "running",
+            "started": time.time(),
+            "ended": 0.0,
+        }
+        ordered_task = task
+
+    def worker():
+        try:
+            for name in order:
+                with ordered_lock:
+                    task["current"] = name
+                project = next((p for p in get_projects() if p["name"] == name), None)
+
+                if action == "start" and project is not None and not force:
+                    gate = dependency_gate(project)
+                    if gate["blocked"]:
+                        with ordered_lock:
+                            task["skipped"].append({"name": name, "reason": gate["message"]})
+                        continue
+
+                result = start_fast(f"{action}-bg", name)
+                if not result.get("names"):
+                    with ordered_lock:
+                        task["skipped"].append({"name": name, "reason": "已在执行或已是目标状态"})
+                    continue
+
+                timeout = 60 if action == "stop" else 180
+                ok = wait_project_state(name, action != "stop", timeout)
+                with ordered_lock:
+                    (task["done"] if ok else task["failed"]).append(name)
+        finally:
+            with ordered_lock:
+                task["current"] = ""
+                task["status"] = "done"
+                task["ended"] = time.time()
+
+    threading.Thread(target=worker, daemon=True).start()
+    label = {"start": "启动", "stop": "停止", "restart": "重启"}[action]
+    return {
+        "ok": True,
+        "message": f"已按依赖顺序提交 {len(order)} 个项目的{label}任务",
+        "names": order,
+        "ordered_id": task["id"],
+    }
 
 
 def _action_in_flight(name):
@@ -2573,8 +2930,12 @@ def notify_job(job):
         pass
 
 
-def start_job(action, target):
-    """启动后台任务，返回 job 或错误信息。"""
+def start_job(action, target, names=None):
+    """启动后台任务，返回 job 或错误信息。
+
+    names 为空时按 target 交给 devctl 自己解析；传入 names 时由 run_job 逐个执行，
+    这样「多选项目更新」不用再依赖 devctl 是否支持逗号分隔的目标。
+    """
     global active_job_id
 
     with jobs_lock:
@@ -2588,6 +2949,7 @@ def start_job(action, target):
             "id": job_id,
             "action": action,
             "target": target,
+            "names": list(names or []),
             "status": "running",
             "exit_code": None,
             "output": str(output),
@@ -2606,26 +2968,42 @@ def start_job(action, target):
 
 
 def run_job(job):
-    """在后台执行 devctl 动作，输出写入任务日志。"""
+    """在后台执行 devctl 动作，输出写入任务日志。
+
+    有 names 时逐个执行并汇总失败项；没有时把 target 直接交给 devctl。
+    """
     global active_job_id
+    targets = job.get("names") or [job["target"]]
+    failed = []
     try:
         with open(job["output"], "w", encoding="utf-8", errors="replace") as out:
-            proc = subprocess.Popen(
-                [str(DEVCTL), job["action"], job["target"]],
-                cwd=str(BASE_DIR),
-                stdout=out,
-                stderr=subprocess.STDOUT,
-                text=True,
-                start_new_session=True,
-            )
-            job["proc"] = proc
-            code = proc.wait()
+            for index, target in enumerate(targets, 1):
+                if job.get("stop_requested"):
+                    break
+                if len(targets) > 1:
+                    out.write(f"[控制台] ({index}/{len(targets)}) {job['action']} {target}\n")
+                    out.flush()
+                proc = subprocess.Popen(
+                    [str(DEVCTL), job["action"], target],
+                    cwd=str(BASE_DIR),
+                    stdout=out,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    start_new_session=True,
+                )
+                job["proc"] = proc
+                code = proc.wait()
+                if code != 0:
+                    failed.append(target)
 
-        job["exit_code"] = code
+        job["exit_code"] = 0 if not failed else 1
         if job.get("stop_requested"):
             job["status"] = "stopped"
         else:
-            job["status"] = "done" if code == 0 else "failed"
+            job["status"] = "done" if not failed else "failed"
+        if failed:
+            with open(job["output"], "a", encoding="utf-8", errors="replace") as out:
+                out.write(f"\n[控制台] 失败项目：{', '.join(failed)}\n")
     except Exception as exc:  # noqa: BLE001 - 需要把异常展示到前端
         job["exit_code"] = -1
         job["status"] = "failed"
@@ -2943,11 +3321,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def rewrite_legacy_location(self, location):
         """把旧系统返回的测试域名重定向改回控制台代理路径。"""
+        host = legacy_proxy_host()
         for base in (
-            f"http://{LEGACY_PROXY_HOST_HEADER}:8080",
-            f"https://{LEGACY_PROXY_HOST_HEADER}:8080",
-            f"http://{LEGACY_PROXY_HOST_HEADER}",
-            f"https://{LEGACY_PROXY_HOST_HEADER}",
+            f"http://{host}:8080",
+            f"https://{host}:8080",
+            f"http://{host}",
+            f"https://{host}",
         ):
             if location.startswith(base):
                 return location[len(base):] or "/"
@@ -2970,7 +3349,7 @@ class Handler(BaseHTTPRequestHandler):
             if lower in ("host", "connection", "content-length", "accept-encoding"):
                 continue
             headers[key] = value
-        headers["Host"] = LEGACY_PROXY_HOST_HEADER
+        headers["Host"] = legacy_proxy_host()
         headers["X-Forwarded-Host"] = f"{LOCAL_HOST}:{PORT}"
         headers["X-Forwarded-Proto"] = "http"
 
@@ -3019,6 +3398,10 @@ class Handler(BaseHTTPRequestHandler):
                     "version": app_version(),
                     # 前端拼入口/文档地址时用，保证和浏览器地址栏的 Host 一致。
                     "local_host": LOCAL_HOST,
+                    # 外部依赖（MySQL/Redis 等）的探活结果，启动前的拦截依据。
+                    "deps": deps_snapshot(trigger=True),
+                    # 按依赖顺序执行的编排进度（启动组 / 批量操作）。
+                    "ordered": ordered_snapshot(),
                 })
                 return
             if parsed.path == "/api/log":
@@ -3065,6 +3448,13 @@ class Handler(BaseHTTPRequestHandler):
                     "label": label,
                     "sources": sources,
                 })
+                return
+            if parsed.path == "/api/deps":
+                # 依赖面板：?refresh=1 时同步重新探活（3 个依赖通常 1 秒内返回）。
+                qs = parse_qs(parsed.query)
+                if (qs.get("refresh") or ["0"])[0] == "1":
+                    refresh_deps()
+                self.send_json(200, {"deps": deps_snapshot(trigger=True)})
                 return
             if parsed.path == "/api/ports":
                 # 端口面板：谁在监听、是不是我们登记的项目。
@@ -3193,32 +3583,68 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/action":
                 body = self.read_body_json()
                 action = body.get("action", "")
-                target = body.get("target", "")
+                target = str(body.get("target", "") or "")
+                raw_names = body.get("names") or []
+                force = bool(body.get("force"))
                 if action not in ACTIONS:
                     self.send_json(400, {"error": "不支持的动作"})
                     return
-                if not valid_target(target):
-                    self.send_json(400, {"error": "未知项目"})
-                    return
+
+                # 两种目标写法：target（all/core/group:xx/项目名）或 names 数组（卡片多选）。
+                if raw_names:
+                    if not isinstance(raw_names, list) or not all(isinstance(item, str) for item in raw_names):
+                        self.send_json(400, {"error": "names 必须是项目名数组"})
+                        return
+                    resolved = expand_target("", raw_names)
+                    if not resolved:
+                        self.send_json(400, {"error": "未知项目"})
+                        return
+                    target_label = ",".join(resolved)
+                else:
+                    if not valid_target(target):
+                        self.send_json(400, {"error": "未知项目"})
+                        return
+                    resolved = expand_target(target)
+                    target_label = target
 
                 if action in FAST_ACTIONS:
-                    result = start_fast(action, target)
-                    self.send_json(200, result)
+                    real = FAST_ACTIONS[action]
+                    if not resolved:
+                        self.send_json(200, {"ok": True, "message": "没有需要处理的项目", "names": []})
+                        return
+                    # 多个目标必须按依赖顺序串行；单个目标保持原来的立即返回。
+                    if len(resolved) > 1:
+                        result = start_ordered(real, resolved, force=force)
+                    else:
+                        name = resolved[0]
+                        if real == "start" and not force:
+                            project = next((p for p in get_projects() if p["name"] == name), None)
+                            gate = dependency_gate(project or {})
+                            if gate["blocked"]:
+                                self.send_json(409, {
+                                    "error": gate["message"],
+                                    "down_deps": gate["down"],
+                                    "can_force": True,
+                                })
+                                return
+                        result = start_fast(action, name)
+                    self.send_json(200 if result.get("ok") else 409, result)
                     return
 
-                if action == "watch":
-                    ok, msg = start_watch(target)
-                    self.send_json(200 if ok else 409, {"ok": ok, "message": msg})
-                    return
-                if action == "unwatch":
-                    code, out, err = run_devctl(["unwatch", target], timeout=30)
-                    self.send_json(200 if code == 0 else 500, {
-                        "ok": code == 0,
-                        "message": (out or err).strip(),
-                    })
+                if action == "watch" or action == "unwatch":
+                    results = []
+                    for name in resolved:
+                        if action == "watch":
+                            ok, msg = start_watch(name)
+                        else:
+                            code, out, err = run_devctl(["unwatch", name], timeout=30)
+                            ok, msg = code == 0, (out or err).strip()
+                        results.append({"name": name, "ok": ok, "message": msg})
+                    all_ok = all(item["ok"] for item in results)
+                    self.send_json(200 if all_ok else 207, {"ok": all_ok, "results": results})
                     return
 
-                job, err = start_job(action, target)
+                job, err = start_job(action, target_label, names=resolved)
                 if err:
                     self.send_json(409, {"error": err})
                     return
@@ -3341,6 +3767,8 @@ def main():
     cleanup_old_jobs()
     # 健康巡检独立线程：不阻塞 HTTP 服务，控制台关掉后线程随进程退出。
     threading.Thread(target=health_loop, daemon=True).start()
+    # 外部依赖巡检单独一个线程：慢依赖不能拖累服务探活。
+    threading.Thread(target=deps_loop, daemon=True).start()
     server_ref = Server((HOST, PORT), Handler)
     print(f"TXLC 服务控制台已启动：http://{HOST}:{PORT}")
     try:

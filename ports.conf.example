@@ -1,5 +1,5 @@
 # 端口覆盖表示例：项目实际监听端口与 projects.conf / 默认规则不一致时使用。
 # 复制为 ports.conf。Java 服务通过 SERVER_PORT 环境变量注入，兼容固定端口与 ${SERVER_PORT:...} 两种写法。
-# 项目名|端口
-svc-order|18083
-svc-auth|18089
+# 格式：项目名 端口（也兼容「项目名|端口」）
+svc-order 18083
+svc-auth 18089
