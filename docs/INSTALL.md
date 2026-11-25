@@ -2,7 +2,29 @@
 
 面向「换一台电脑，从 clone 到服务跑起来」的完整步骤。日常使用和接口说明见 [README.md](../README.md)，行为契约见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 
-控制台本身不安装业务依赖；`install.sh` 只复制配置模板、建运行目录、检查环境。
+控制台本身不安装业务依赖；当前 `install.sh` / `install.cmd` 创建空配置和运行目录并检查环境，尚不能自动安装缺失的软件。
+
+
+## 同事快速开始
+
+安装脚本**只检查环境并提示安装地址，不会自动下载安装软件**。已有配置会保留，不会被覆盖。第一次运行生成空项目列表；先打开控制台，再添加本机项目。
+
+### Windows
+
+1. 把仓库克隆或下载并解压到你想存放的目录。没有 Git 时可在 GitHub 仓库页面选择 **Code → Download ZIP**。
+2. 双击项目根目录的 `setup.cmd`。窗口会显示环境检查结果；如果提示缺少 Python 3.8+，按提示打开官网安装，选择安装目录并勾选 **Add python.exe to PATH**，然后重新打开终端或重新双击检查。Java、Maven、Git、Node 只在对应功能需要时安装。
+3. 检查完成后，双击根目录的 `start.cmd`，或者双击 `app\windows\launch.cmd`。也可以在浏览器打开 http://127.0.0.1:18000。
+4. 页面空白列表代表还没有项目；在控制台中添加本机项目。需要启动或构建 Java 服务时，请先按提示准备 JDK 和 Maven。
+
+### macOS
+
+1. 克隆或下载并解压仓库，打开“终端”，进入项目目录。例如输入 `cd `（末尾有空格），再把项目文件夹拖进终端并回车。
+2. 第一次运行 `chmod +x setup.command start.command`。之后可在 Finder 双击 `setup.command` 检查环境；也可以直接运行 `bash install.sh`。
+3. 若提示缺少 Python 3.8+，按提示前往官网下载并安装，然后重新检查；其他工具只在对应项目需要时安装。
+4. 双击 `start.command`，或运行 `bash start.command`，会在浏览器打开控制台。首次双击时如果 macOS 提示无法验证来源，请根据系统提示操作，或使用终端命令启动。
+5. 在控制台里添加本机项目。公司内网地址和旧电脑配置不会随仓库自动下载；需要时另行安全迁移并修改路径。
+
+安装后如遇问题，先看脚本中的 FAIL/WARN；下文有配置和排障的详细说明。
 
 ---
 
@@ -30,7 +52,7 @@ xcode-select --install     # 只有要生成 服务控制台.app 时需要
 
 - JDK：装 Temurin 17 pkg，确认 `java -version` 可用
 - Maven：下载 `apache-maven-3.9.x`，解压到 `dev-tools/apache-maven-3.9.x`；`devctl.py` 会自动把 `dev-tools/apache-maven-*/bin` 加进子进程 PATH
-- Python：macOS 自带 `/usr/bin/python3` 通常已满足 3.8+
+- Python：运行 `python3 --version` 确认是 3.8 或以上；没有可用版本时从 Python 官网安装。
 
 ### Linux（Debian / Ubuntu）
 
@@ -85,7 +107,7 @@ bash install.sh
 
 它会：
 
-- 从 `*.conf.example` 复制 `projects.conf`、`deps.conf`、`ports.conf`、`entries.conf`、`health.conf`、`legacy-proxy.conf`
+- 创建空的 `projects.conf`、`deps.conf`、`ports.conf`、`entries.conf`、`health.conf`、`legacy-proxy.conf`；可参考同名的 `*.conf.example`
 - 复制 `maven-settings.xml`
 - 创建 `services/`、`logs/`、`tmp/`
 - 检查 Python / Java / Maven / Git / Node
@@ -102,7 +124,7 @@ bash install.sh
 
 - 识别带 `*-server` 模块或 Spring Boot 启动类的工程
 - 输出候选行，端口建议打印在终端
-- 已有 `projects.conf` 时结果写入 `projects.conf.candidate`，不覆盖原配置
+- 已有真实项目时结果写入 `projects.conf.candidate`；空配置可由扫描结果填充
 - **项目名、路径、核心标记仍需人工确认**
 
 #### 方式 B：手写
@@ -171,31 +193,13 @@ svc-auth 18089
 
 ### 1.6 启动
 
-先起核心服务：
+先打开控制台，不要求先启动业务项目：
 
 ```bash
-./devctl.sh start core
+bash start.command
 ```
 
-首次没有 jar 时会自动 `mvn package`，耗时可能几分钟。查看状态：
-
-```bash
-./devctl.sh status all
-```
-
-再起控制台：
-
-```bash
-python3 dashboard.py
-```
-
-浏览器打开：
-
-```text
-http://127.0.0.1:18000
-```
-
-控制台只监听 `127.0.0.1`。关闭 `dashboard.py` 不会停掉已启动的业务服务。
+它会启动控制台并在浏览器打开 `http://127.0.0.1:18000`。首次添加项目后，按实际需要启动对应服务。也可以直接在终端运行 `python3 dashboard.py`；结束该终端进程不会停止已经启动的业务服务。
 
 ### 1.7 可选：生成原生窗口
 
@@ -206,11 +210,7 @@ open 服务控制台.app
 
 之后日常双击 `服务控制台.app`：它会先确保后台服务在跑，再打开原生窗口。
 
-macOS 拦截未签名应用时：右键 App →「打开」，或执行：
-
-```bash
-xattr -dr com.apple.quarantine 服务控制台.app
-```
+如果系统阻止打开自己构建的 App，可在“系统设置 → 隐私与安全性”中查看提示；也可以继续使用上面的浏览器启动方式。
 
 ---
 

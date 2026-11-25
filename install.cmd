@@ -1,8 +1,8 @@
 @echo off
-rem 首次初始化脚本（Windows）。
+rem 首次初始化脚本（Windows）：检查环境，不自动安装软件。
 rem
 rem 与 install.sh 做同样的事，只是命令换成 cmd 写法：
-rem   1. 从 *.example 复制出本机配置（已存在的不覆盖）
+rem   1. 创建空配置（已存在的不覆盖）
 rem   2. 建好 services\ logs\ tmp\
 rem   3. 检查 Python / Java / Maven / Git / Node
 rem
@@ -15,6 +15,7 @@ rem   install.cmd --scan C:\work
 rem
 rem 退出码：0 = 完成；1 = 关键依赖缺失；2 = 参数错误。
 
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0" || exit /b 1
 
@@ -50,6 +51,14 @@ if "%SCAN%"=="1" if "%ROOTS%"=="" (
     exit /b 2
 )
 
+set "PY_CMD="
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>nul
+if not errorlevel 1 set "PY_CMD=python"
+if not defined PY_CMD (
+    py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>nul
+    if not errorlevel 1 set "PY_CMD=py -3"
+)
+
 echo TXLC 本地服务控制台 · 初始化
 echo 目录：%CD%
 
@@ -57,8 +66,8 @@ echo.
 echo == 配置模板 ==
 if "%SCAN%"=="0" (
     if not exist projects.conf (
-        copy /y projects.conf.example projects.conf >nul
-        echo   OK   创建 projects.conf（来自模板，请改成你的路径）
+        > projects.conf echo # Local configuration; see projects.conf.example
+        echo   OK   创建空的 projects.conf（示例见 projects.conf.example）
     ) else (
         echo   OK   projects.conf 已存在，保持不变
     )
@@ -74,7 +83,7 @@ rem 其余配置文件：存在就跳过，避免覆盖用户已经填好的内�
 for %%F in (deps ports entries health legacy-proxy) do (
     if not exist "%%F.conf" (
         if exist "%%F.conf.example" (
-            copy /y "%%F.conf.example" "%%F.conf" >nul
+            > "%%F.conf" echo # Local configuration; see %%F.conf.example
             echo   OK   创建 %%F.conf
         ) else (
             echo   WARN 缺少 %%F.conf.example，跳过
@@ -100,12 +109,11 @@ rem ---------------------------------------------------------------
 if "%SCAN%"=="1" (
     echo.
     echo == 扫描 Maven 项目 ==
-    where python >nul 2>nul
-    if errorlevel 1 (
-        echo   FAIL 找不到 python，无法扫描
+    if not defined PY_CMD (
+        echo   FAIL 找不到 Python 3.8+，无法扫描
     ) else (
         set "TMP_OUT=%TEMP%\txlc-discover.txt"
-        python discover.py !ROOTS! > "!TMP_OUT!"
+        !PY_CMD! discover.py !ROOTS! > "!TMP_OUT!"
         if errorlevel 1 (
             echo   FAIL discover.py 执行失败，可稍后手动运行：python discover.py ^<目录^>
         ) else (
@@ -114,8 +122,8 @@ if "%SCAN%"=="1" (
             if errorlevel 1 (
                 echo   WARN 没有识别到 Spring Boot 项目，保留手写配置的方式
                 if not exist projects.conf (
-                    copy /y projects.conf.example projects.conf >nul
-                    echo   OK   回退使用 projects.conf.example 模板
+                    > projects.conf echo # Local configuration; see projects.conf.example
+                    echo   OK   创建空 projects.conf；示例见 projects.conf.example
                 )
             ) else (
                 if exist projects.conf (
@@ -136,43 +144,42 @@ rem 环境检查
 rem ---------------------------------------------------------------
 echo.
 echo == 环境检查 ==
-where python >nul 2>nul
-if errorlevel 1 (
-    echo   FAIL 未找到 Python 3.8+；控制台无法启动
+if not defined PY_CMD (
+    echo   FAIL 需要 Python 3.8+：https://www.python.org/downloads/
+    echo        安装时勾选 Add python.exe to PATH，然后重开终端重试。
     set "MISSING=1"
 ) else (
-    for /f "delims=" %%V in ('python -c "import platform;print(platform.python_version())" 2^>nul') do echo   OK   Python %%V
+    for /f "delims=" %%V in ('!PY_CMD! -c "import platform;print(platform.python_version())" 2^>nul') do echo   OK   Python %%V
 )
 
 where java >nul 2>nul
 if errorlevel 1 (
-    echo   WARN 未找到 java（启动后端服务需要 JDK 17+）
+    echo   WARN 后端项目需要 JDK 17+：https://adoptium.net/temurin/releases/
 ) else (
     echo   OK   Java 可用
 )
 
 rem Maven 可能不在 PATH，也可能解压在 dev-tools 下。
+set "MAVEN_FOUND="
 where mvn >nul 2>nul
-if errorlevel 1 (
-    if exist "apache-maven-*\bin\mvn.cmd" (
-        echo   OK   Maven 可用（dev-tools 目录内）
-    ) else (
-        echo   WARN 未找到 mvn（构建/更新后端项目时需要）
-    )
-) else (
+if not errorlevel 1 set "MAVEN_FOUND=1"
+for /d %%M in ("apache-maven-*") do if exist "%%~M\bin\mvn.cmd" set "MAVEN_FOUND=1"
+if defined MAVEN_FOUND (
     echo   OK   Maven 可用
+) else (
+    echo   WARN 构建后端项目需要 Maven：https://maven.apache.org/download.cgi
 )
 
 where git >nul 2>nul
 if errorlevel 1 (
-    echo   WARN 未找到 git（update / gitpull 等功能会不可用）
+    echo   WARN Git 功能需要 Git：https://git-scm.com/downloads
 ) else (
     echo   OK   Git 可用
 )
 
 where node >nul 2>nul
 if errorlevel 1 (
-    echo   INFO 未找到 node（只有前端项目需要）
+    echo   INFO 前端项目需要 Node.js：https://nodejs.org/
 ) else (
     for /f "delims=" %%V in ('node --version 2^>nul') do echo   OK   Node %%V
 )
@@ -183,10 +190,8 @@ rem ---------------------------------------------------------------
 echo.
 echo == 下一步 ==
 echo   1. 检查 projects.conf 里的路径是否为本机路径
-echo   2. python devctl.py doctor        ^(环境与配置自检^)
-echo   3. devctl.cmd start core          ^(启动核心项目，首次缺 jar 会自动构建^)
-echo   4. python dashboard.py            ^(起控制台，再打开 http://127.0.0.1:18000^)
-echo      也可以双击 app\windows\launch.cmd：后台起服务并打开应用窗口
+echo   2. 双击 app\windows\launch.cmd，打开控制台。
+echo   3. 在页面里添加本机项目；需要时运行 python devctl.py doctor 自检。
 
 echo.
 if defined MISSING (

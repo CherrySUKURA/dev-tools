@@ -94,13 +94,15 @@ def child_env(extra=None):
     env = dict(os.environ)
     # Windows 没有这些目录；写进 PATH 只会让查找变慢，不影响结果但不该带过去。
     paths = [] if plat.IS_WINDOWS else ["/usr/local/bin", "/opt/homebrew/bin"]
-    # 找不到 mvn 时补常见安装位置，避免 GUI 启动时构建失败。
-    if not shutil.which("mvn"):
-        for pattern in ("dev-tools/apache-maven-*/bin", ".sdkman/candidates/maven/current/bin"):
-            for candidate in sorted(Path.home().glob(pattern), reverse=True):
-                if (candidate / "mvn").exists():
-                    paths.insert(0, str(candidate))
-                    break
+    # 项目目录里的 Maven 可供双击启动的 GUI 进程使用，无需更改系统 PATH。
+    if not shutil.which("mvn") and not shutil.which("mvn.cmd"):
+        candidates = list(TOOLS_DIR.glob("apache-maven-*/bin"))
+        if not plat.IS_WINDOWS:
+            candidates += list(Path.home().glob(".sdkman/candidates/maven/current/bin"))
+        for candidate in sorted(candidates, reverse=True):
+            if (candidate / "mvn").is_file() or (candidate / "mvn.cmd").is_file():
+                paths.insert(0, str(candidate))
+                break
     if paths:
         env["PATH"] = os.pathsep.join(paths + [env.get("PATH", "")])
     if extra:
@@ -494,6 +496,12 @@ def kill_process(pid, grace=STOP_GRACE):
             return
         time.sleep(0.5)
     plat.kill_pid(pid, force=True)
+    # taskkill /F is asynchronous; allow the process to release its port/log.
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        if not plat.pid_alive(pid):
+            return
+        time.sleep(0.1)
 
 
 def kill_by_port(name, message):

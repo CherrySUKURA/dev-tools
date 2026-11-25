@@ -8,6 +8,7 @@
 # 运行：
 #   cd ~/java/dev-tools && python3 -m unittest discover -s tests -v
 
+import os
 import sys
 import tempfile
 import unittest
@@ -32,6 +33,7 @@ class FrontendScriptTest(unittest.TestCase):
         dashboard.SERVICES_DIR = self.saved
         self.tmp.cleanup()
 
+    @unittest.skipIf(os.name == "nt", "POSIX executable permissions are unavailable on Windows")
     def test_posix_scripts(self):
         with mock.patch.object(dashboard.plat, "IS_WINDOWS", False):
             start, build = dashboard.write_frontend_scripts(

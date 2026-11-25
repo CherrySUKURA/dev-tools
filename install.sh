@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 首次初始化脚本（macOS / Linux）。
 #
-# 只做三件事，不改任何业务项目：
-#   1. 从 *.example 复制出本机配置（已存在的不覆盖）；
+# 检查环境并初始化空配置，不自动安装软件，不覆盖现有配置：
+#   1. 创建空配置（示例保留在 *.example）；
 #   2. 建好运行目录 services/ logs/ tmp/；
 #   3. 检查 Python / Java / Maven / Git / Node 是否可用。
 #
@@ -90,12 +90,11 @@ echo "目录：$(pwd)"
 echo
 echo "== 配置模板 =="
 
-# 带 --scan 时先不复制 projects.conf.example：它的示例行会让脚本误以为「已有配置」，
-# 从而把扫描结果降级成 candidate。
+# 带 --scan 时暂不创建配置，以便扫描结果可写入新配置。
 if [ "$SCAN" -eq 0 ]; then
     if [ ! -f projects.conf ]; then
-        cp projects.conf.example projects.conf
-        ok "创建 projects.conf（来自模板，请改成你的路径）"
+        printf "# 项目配置；示例见 projects.conf.example\n" > projects.conf
+        ok "创建空的 projects.conf（示例见 projects.conf.example）"
     else
         ok "projects.conf 已存在，保持不变"
     fi
@@ -110,7 +109,7 @@ fi
 for base in deps ports entries health legacy-proxy; do
     if [ ! -f "${base}.conf" ]; then
         if [ -f "${base}.conf.example" ]; then
-            cp "${base}.conf.example" "${base}.conf"
+            printf "# 本机配置；示例见 %s.conf.example\n" "$base" > "${base}.conf"
             ok "创建 ${base}.conf"
         else
             warn "缺少 ${base}.conf.example，跳过"
@@ -156,8 +155,8 @@ if [ "$SCAN" -eq 1 ]; then
             else
                 warn "没有识别到 Spring Boot 项目，保留手写配置的方式"
                 if [ ! -f projects.conf ]; then
-                    cp projects.conf.example projects.conf
-                    ok "回退使用 projects.conf.example 模板"
+                    printf "# 项目配置；示例见 projects.conf.example\n" > projects.conf
+                    ok "创建空 projects.conf；示例见 projects.conf.example"
                 fi
             fi
         else
@@ -175,36 +174,36 @@ echo
 echo "== 环境检查 =="
 
 PY_BIN=$(command -v python3 || command -v python || true)
-if [ -n "$PY_BIN" ]; then
+if [ -n "$PY_BIN" ] && "$PY_BIN" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
     ok "Python $("$PY_BIN" -c 'import platform; print(platform.python_version())' 2>/dev/null)（$PY_BIN）"
 else
-    fail "未找到 Python 3.8+；控制台无法启动"
+    fail "需要 Python 3.8+；请从 https://www.python.org/downloads/ 安装，然后重新运行"
 fi
 
 if command -v java >/dev/null 2>&1; then
     JAVA_VER=$(java -version 2>&1 | head -n 1)
     ok "Java：$JAVA_VER"
 else
-    warn "未找到 java（启动后端服务需要 JDK 17+）"
+    warn "未找到 Java（后端项目需要 JDK 17+）：https://adoptium.net/temurin/releases/"
 fi
 
 # Maven 既可能在 PATH，也可能解压在 dev-tools 下（与 devctl.child_env 的兜底一致）。
 if command -v mvn >/dev/null 2>&1 || ls -d apache-maven-*/bin/mvn >/dev/null 2>&1; then
     ok "Maven 可用"
 else
-    warn "未找到 mvn（构建/更新后端项目时需要）"
+    warn "未找到 Maven（构建后端项目需要）：https://maven.apache.org/download.cgi"
 fi
 
 if command -v git >/dev/null 2>&1; then
     ok "Git $(git --version | awk '{print $3}')"
 else
-    warn "未找到 git（update / gitpull 等功能会不可用）"
+    warn "未找到 Git（Git 功能需要）：https://git-scm.com/downloads"
 fi
 
 if command -v node >/dev/null 2>&1; then
     ok "Node $(node --version 2>/dev/null)"
 else
-    echo "  INFO 未找到 node（只有前端项目需要）"
+    echo "  INFO 未找到 Node.js（前端项目需要）：https://nodejs.org/"
 fi
 
 # ---------------------------------------------------------------
@@ -218,11 +217,8 @@ if conf_has_rows projects.conf; then
 else
     echo "  1. 编辑 projects.conf，或运行 ./install.sh --scan <你的代码目录>"
 fi
-echo "  2. ./devctl.py doctor        # 环境与配置自检"
-echo "  3. ./devctl.sh start core    # 启动核心项目（首次会自动构建，耗时较长）"
-echo "  4. python3 dashboard.py      # 起控制台，然后浏览器打开 http://127.0.0.1:18000"
-echo "     可选：./app/build.sh 生成 服务控制台.app（需要 Xcode 命令行工具），之后双击即可"
-echo "     后端也可以直接双击 服务控制台.app；没有 .app 时用浏览器方式。"
+echo "  2. bash start.command       # 启动控制台并打开浏览器"
+echo "  3. 在页面里添加本机项目；需要时运行 ./devctl.py doctor 自检"
 
 echo
 if [ "$FAIL_COUNT" -gt 0 ]; then

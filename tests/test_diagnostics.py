@@ -47,9 +47,9 @@ class DiagnosticsTest(unittest.TestCase):
 
         # 项目相关日志：服务输出、启停操作、健康巡检、Spring 应用日志。
         self.project_log = self.root / "svc-demo.log"
-        self.project_log.write_text("project output\n", encoding="utf-8")
+        self.project_log.write_bytes(b"project output\n")
         self.app_log = self.root / "app.log"
-        self.app_log.write_text("app log\n", encoding="utf-8")
+        self.app_log.write_bytes(b"app log\n")
         self.health_log = self.root / "svc-demo.health.log"
         self.health_log.write_text("health log\n", encoding="utf-8")
 

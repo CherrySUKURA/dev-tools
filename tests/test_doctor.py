@@ -12,6 +12,7 @@
 import contextlib
 import io
 import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -346,7 +347,10 @@ class DevctlIntegrationTest(DoctorTestBase):
         self.assertIn("用法", buffer.getvalue())
 
     def test_install_sh_syntax(self):
-        subprocess.run(["bash", "-n", str(ROOT / "install.sh")], check=True)
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("bash is unavailable")
+        subprocess.run([bash, "-n", str(ROOT / "install.sh")], check=True)
 
     def test_install_cmd_is_crlf_batch(self):
         data = (ROOT / "install.cmd").read_bytes()

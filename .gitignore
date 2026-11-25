@@ -26,3 +26,6 @@ services/
 
 # 与本项目无关的本地技能目录
 txlcButtonLayout/
+
+# 本机专用启动器包含本机 Python 路径，不随仓库分发。
+/open-console.cmd

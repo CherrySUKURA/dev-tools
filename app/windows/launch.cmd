@@ -13,20 +13,20 @@ setlocal
 set "HERE=%~dp0"
 
 set "PY_CMD="
-where py >nul 2>nul
-if not errorlevel 1 (
-  set "PY_CMD=py -3"
-) else (
-  where python >nul 2>nul
-  if not errorlevel 1 set "PY_CMD=python"
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>nul
+if not errorlevel 1 set "PY_CMD=python"
+if not defined PY_CMD (
+  py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>nul
+  if not errorlevel 1 set "PY_CMD=py -3"
 )
 
 if not defined PY_CMD (
-  echo 找不到 Python 3：请安装 Python 并勾选 "Add python.exe to PATH" 1>&2
+  echo 找不到可用的 Python 3.8+，请先双击 setup.cmd 检查环境。 1>&2
   pause
   exit /b 1
 )
 
 %PY_CMD% "%HERE%launch.py"
-if errorlevel 1 pause
-exit /b %errorlevel%
+set "RESULT=%ERRORLEVEL%"
+if not "%RESULT%"=="0" pause
+exit /b %RESULT%

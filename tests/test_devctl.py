@@ -363,19 +363,21 @@ class FakeProjectIntegrationTest(ConfTestBase):
         directory = self.root / "fake-svc"
         directory.mkdir()
         # 启动脚本以前台方式跑 Python HTTP server；devctl 会把它 detach 到后台。
-        start = directory / "start.sh"
-        start.write_text(
-            "#!/bin/bash\n"
-            "exec \"$PYTHON_BIN\" -m http.server \"$PORT\" --bind 127.0.0.1\n",
-            encoding="utf-8",
-        )
-        stop = directory / "stop.sh"
-        stop.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
-        start.chmod(0o755)
-        stop.chmod(0o755)
+        if os.name == "nt":
+            start = directory / "start.cmd"
+            start.write_text('@echo off\n"%PYTHON_BIN%" -m http.server %PORT% --bind 127.0.0.1\n', encoding="utf-8")
+            stop = directory / "stop.cmd"
+            stop.write_text("@echo off\nexit /b 0\n", encoding="utf-8")
+        else:
+            start = directory / "start.sh"
+            start.write_text('#!/bin/bash\nexec "$PYTHON_BIN" -m http.server "$PORT" --bind 127.0.0.1\n', encoding="utf-8")
+            stop = directory / "stop.sh"
+            stop.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+            start.chmod(0o755)
+            stop.chmod(0o755)
 
         self.write_projects([[
-            "fake-svc", str(directory), "0", "", "start.sh", "stop.sh",
+            "fake-svc", str(directory), "0", "", start.name, stop.name,
         ]])
         self.ports_conf.write_text(f"fake-svc {port}\n", encoding="utf-8")
 
