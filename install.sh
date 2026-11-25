@@ -219,8 +219,10 @@ else
     echo "  1. 编辑 projects.conf，或运行 ./install.sh --scan <你的代码目录>"
 fi
 echo "  2. ./devctl.py doctor        # 环境与配置自检"
-echo "  3. ./devctl.sh start all     # 启动全部项目（或 ./devctl.py start core）"
-echo "  4. 打开 http://127.0.0.1:18000（或双击 服务控制台.app）"
+echo "  3. ./devctl.sh start core    # 启动核心项目（首次会自动构建，耗时较长）"
+echo "  4. python3 dashboard.py      # 起控制台，然后浏览器打开 http://127.0.0.1:18000"
+echo "     可选：./app/build.sh 生成 服务控制台.app（需要 Xcode 命令行工具），之后双击即可"
+echo "     后端也可以直接双击 服务控制台.app；没有 .app 时用浏览器方式。"
 
 echo
 if [ "$FAIL_COUNT" -gt 0 ]; then

@@ -6,7 +6,7 @@
 
 > 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）、S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）、S2.5 原生窗口外壳、S2.6 诊断日志、S3（Python 核心 + Windows 执行路径）、S3.5（初始化与环境自检）已完成。详见 [ROADMAP.md](./ROADMAP.md)。
 >
-> 后续计划用 Go + Vue 3 重写为 `txlc-console`，本仓库是那次重写的**可运行规格书**——行为契约见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)。
+> 后续计划用 Go + Vue 3 重写为 `txlc-console`，本仓库是那次重写的**可运行规格书**——行为契约见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)，换机器安装见 [docs/INSTALL.md](./docs/INSTALL.md)。
 
 ---
 
@@ -15,13 +15,17 @@
 ### 新机器：从 clone 到启动
 
 ```bash
-git clone <仓库地址> dev-tools && cd dev-tools
+git clone https://github.com/CherrySUKURA/dev-tools.git dev-tools && cd dev-tools
 
 ./install.sh                  # 复制 *.conf.example、建 services/logs/tmp、检查环境
 vim projects.conf             # 把示例路径改成本机路径（至少改「名字|目录」两列）
 ./devctl.py doctor            # 环境 + 配置自检；有 FAIL 先按提示修复
-./devctl.sh start core        # 启动核心项目；或双击 服务控制台.app
+./devctl.sh start core        # 启动核心项目（首次缺 jar 会自动构建，耗时较长）
+python3 dashboard.py          # 起控制台，浏览器打开 http://127.0.0.1:18000
+# 可选：./app/build.sh 生成 服务控制台.app（需要 Xcode 命令行工具）
 ```
+
+完整步骤（依赖安装、Windows、从旧电脑迁移配置、验收清单、常见问题）见 **[docs/INSTALL.md](./docs/INSTALL.md)**。
 
 不知道 `projects.conf` 怎么写时，可以先生成候选：
 
@@ -135,6 +139,7 @@ App 菜单除了刷新，还提供：**在浏览器中打开（网页配置入�
 | `maven-settings.xml` | 允许从内网 HTTP Maven 仓库拉包 |
 | `legacy-proxy.conf` | 旧门户入口代理使用的 Host 头（真实域名不入库，默认 `localhost`） |
 | `ROADMAP.md` | 功能路线图 P0–P3、阶段 S1–S4 与进度 |
+| `docs/INSTALL.md` | 新机器安装指南：依赖、macOS/Linux/Windows 步骤、旧机迁移、验收与常见问题 |
 | `docs/ARCHITECTURE.md` | 分层、数据流、行为契约、重构边界 |
 
 ---

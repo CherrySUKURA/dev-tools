@@ -184,8 +184,9 @@ echo.
 echo == 下一步 ==
 echo   1. 检查 projects.conf 里的路径是否为本机路径
 echo   2. python devctl.py doctor        ^(环境与配置自检^)
-echo   3. devctl.cmd start all           ^(启动全部项目^)
-echo   4. 打开 http://127.0.0.1:18000
+echo   3. devctl.cmd start core          ^(启动核心项目，首次缺 jar 会自动构建^)
+echo   4. python dashboard.py            ^(起控制台，再打开 http://127.0.0.1:18000^)
+echo      也可以双击 app\windows\launch.cmd：后台起服务并打开应用窗口
 
 echo.
 if defined MISSING (
