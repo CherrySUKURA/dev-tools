@@ -32,6 +32,7 @@ rem devctl.py 是运行时用 import 进来的（--devctl 分发），必须显�
 %PY_CMD% -m PyInstaller --noconfirm --clean --windowed --onedir ^
   --name TXLCConsole ^
   --hidden-import devctl ^
+  --hidden-import doctor ^
   dashboard.py || exit /b 1
 
 rem 运行时要读的静态文件与配置：放到 exe 同级目录。

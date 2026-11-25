@@ -4093,6 +4093,9 @@ def main():
     global server_ref
     # 打包后没有独立 python 解释器：同一个 exe 带 --devctl 时转发给 devctl.py。
     if len(sys.argv) > 1 and sys.argv[1] == "--devctl":
+        # 打包后 devctl 的 __file__ 在临时解包目录，必须显式把配置目录指到 exe 同级，
+        # 否则 `TXLCConsole.exe --devctl doctor` 会去解包目录找 projects.conf。
+        os.environ.setdefault("TXLC_TOOLS_DIR", str(BASE_DIR))
         import devctl
         return devctl.main([sys.argv[0]] + sys.argv[2:])
     configure_logging()

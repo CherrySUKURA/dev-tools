@@ -31,6 +31,9 @@ devctl.py（Python 核心，devctl.sh / devctl.cmd 只做参数转发）
           │
           ▼
 真实进程（java -jar / services/*.sh|*.cmd / npm dev），日志重定向到状态目录
+
+旁路：install.sh / install.cmd（首次初始化）
+      doctor.py（只读自检，复用 devctl 的配置解析与端口判断，不启动 HTTP 服务）
 ```
 
 ---
@@ -45,6 +48,8 @@ devctl.py（Python 核心，devctl.sh / devctl.cmd 只做参数转发）
 | HTTP / 编排层 | `dashboard.py` | 路由、参数校验、任务排队、状态聚合、健康巡检、依赖探活与闸门、拓扑排序与编排执行、Git 面板 |
 | 平台层 | `console_platform.py` | `listening_ports`、`pid_on_port`、`process_tree`、`kill_tree`、`pid_alive`、`spawn_detached`、`port_open`、`open_url`、`open_app_window`、`pick_directory`、`notify`、`state_dir`、`script_suffix`、`find_executable` |
 | 执行层 | `devctl.py` | 进程的真实启停、Maven 构建、jar 查找、日志重定向、端口占用判定 |
+| 初始化 | `install.sh` / `install.cmd` | 只复制模板、建目录、检查命令；`--scan` 调 `discover.py`，不覆盖已有配置 |
+| 自检 | `doctor.py` | 只读检查环境与配置，输出 OK/WARN/FAIL；有 FAIL 时退出码非 0 |
 | 兼容入口 | `devctl.sh` / `devctl.cmd` | 只负责找到 Python 并转发参数，不含业务逻辑 |
 | 配置 | `*.conf` | 项目、端口、入口、健康、外部依赖，全部为竖线分隔纯文本 |
 
@@ -71,6 +76,8 @@ devctl.py（Python 核心，devctl.sh / devctl.cmd 只做参数转发）
 | `<系统临时目录>/<项目>.health.log` | 自动重启记录 | 追加 |
 | `health.conf` | 探活配置 | 持久 |
 | `deps.conf` | 外部依赖登记 | 持久 |
+| `*.conf.example` | 配置模板；`install.sh` 只复制不存在的文件，不覆盖本机配置 | 持久 |
+| `projects.conf.candidate` | 已有配置时 `--scan` 的候选结果，需人工确认后替换 | 可删除 |
 
 > 状态目录由 `console_platform.state_dir()` 决定：macOS / Linux 是 `/tmp`（保持历史路径，升级后旧 pid/日志仍可读），Windows 是 `%TEMP%\txlc`。这一层仍是临时目录（重启机器即丢），重写时应改成项目内的 `state/` 目录并落库。
 
@@ -150,6 +157,9 @@ devctl.py（Python 核心，devctl.sh / devctl.cmd 只做参数转发）
 - `ports.conf` 的覆盖通过 `SERVER_PORT` 注入；自定义脚本同时拿到 `PORT` 与 `SERVER_PORT`。分隔符空白与 `|` 都必须接受。
 - `deps.conf` 的 `tcp` 只建立连接，`http` 只看有没有 HTTP 响应；**不能**因为 HTTP 4xx 判为不可用。
 - `entries.conf` 与文档地址展示时统一归一化成 `localhost`，避免后端按 Host 判成非法来源。
+- 配置为空不是错误：`list` / `status` 要给「编辑 projects.conf 或运行 `./install.sh --scan`」的提示；`json` 仍必须只输出 `[]`，不能把提示文案混进 JSON。
+- `install.sh` 不允许覆盖已有 `*.conf`；扫描结果在已有配置时只能写 `projects.conf.candidate`。
+- `doctor.py` 只读，不启动/停止服务，也不 import `dashboard.py`；有 FAIL 时退出码非 0，WARN 不影响启动。
 
 ### 6.3 状态语义
 

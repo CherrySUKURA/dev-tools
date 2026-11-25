@@ -8,6 +8,7 @@
 # 用法（与旧 bash 版一致）：
 #   ./devctl.py json                     # 供 Web 控制台读取的状态（单行 JSON）
 #   ./devctl.py list
+#   ./devctl.py doctor [--env]           # 环境与配置自检（只检查，不启动服务）
 #   ./devctl.py status|start|stop|restart|update [项目|all|core]
 #   ./devctl.py install|gitpull|gitfetch|gitstash|gitunstash [项目|all|core]
 #   ./devctl.py watch|unwatch [项目|all|core]
@@ -1060,9 +1061,27 @@ def panel():
 # 命令实现（命令行与面板共用）
 # ---------------------------------------------------------------
 
+def config_hint():
+    """配置为空时的统一提示：告诉用户「怎么把项目加进来」，而不是只报未知项目。"""
+    if PROJECTS_CONF.is_file():
+        return (
+            "projects.conf 里还没有任何项目。请编辑 projects.conf，"
+            "或运行 ./install.sh --scan <你的代码目录> 生成候选。"
+        )
+    return (
+        "未找到 projects.conf。请先运行 ./install.sh 生成模板，"
+        "或运行 ./install.sh --scan <你的代码目录> 生成候选。"
+    )
+
+
 def do_list():
-    for name in all_names():
+    names = all_names()
+    if not names:
+        say(config_hint())
+        return 0
+    for name in names:
         print(f"{name}  port={project_port(name)}  dir={project_dir(name)}")
+    return 0
 
 
 def do_status(target):
@@ -1070,9 +1089,22 @@ def do_status(target):
     if names is None:
         say(f"未知项目：{target}")
         return 1
+    if not names:
+        say(config_hint())
+        return 1
     for name in names:
         status_one(name)
     return 0
+
+
+def do_doctor(target):
+    """环境自检入口；doctor 放在独立模块，避免 dashboard/HTTP 层被一起加载。"""
+    if target not in ("all", "--env"):
+        say("用法：devctl.py doctor [--env]")
+        return 1
+    import doctor  # 延迟导入：只有真正执行 doctor 时才加载检查逻辑
+
+    return doctor.run(env_only=(target == "--env"))
 
 
 def do_start(target):
@@ -1219,7 +1251,8 @@ def main(argv):
         return run_action_marker(name, argv[3])
 
     handlers = {
-        "list": lambda: (do_list(), 0)[1],
+        "list": lambda: do_list(),
+        "doctor": lambda: do_doctor(target),
         "status": lambda: do_status(target),
         "start": lambda: do_start(target),
         "stop": lambda: do_stop(target),
@@ -1236,11 +1269,11 @@ def main(argv):
         "json": lambda: (json_status(), 0)[1],
     }
     if action in ("-h", "--help", "help"):
-        print(__doc__ or "用法：devctl.py <list|status|start|stop|restart|update|install|git*|watch|unwatch|panel|json> [项目|all|core]")
+        print(__doc__ or "用法：devctl.py <list|doctor|status|start|stop|restart|update|install|git*|watch|unwatch|panel|json> [项目|all|core]")
         return 0
     handler = handlers.get(action)
     if handler is None:
-        say("用法：devctl.py <list|status|start|stop|restart|update|install|gitpull|gitfetch|gitstash|gitunstash|watch|unwatch|panel> [项目|all|core]")
+        say("用法：devctl.py <list|doctor|status|start|stop|restart|update|install|gitpull|gitfetch|gitstash|gitunstash|watch|unwatch|panel> [项目|all|core]")
         return 1
     result = handler()
     return int(result or 0)

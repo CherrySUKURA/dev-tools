@@ -4,13 +4,38 @@
 
 **两个入口，同一份配置**：双击 `服务控制台.app` 得到原生窗口（日常管理用）；浏览器打开 `http://localhost:18000` 得到网页版（多屏、远程调试用）。两边读写同一份 `projects.conf` / `ports.conf` / `deps.conf`，配置在哪个入口做都一样。
 
-> 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）、S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）、S2.5 原生窗口外壳、S2.6 诊断日志、S3（Python 核心 + Windows 执行路径）已完成。详见 [ROADMAP.md](./ROADMAP.md)。
+> 当前状态：macOS 上日常在用，管理 17 个注册项目。S1（健康检查 + 自动重启、日志增强、端口面板）、S2（外部依赖检查、分组与依赖顺序、批量操作与搜索）、S2.5 原生窗口外壳、S2.6 诊断日志、S3（Python 核心 + Windows 执行路径）、S3.5（初始化与环境自检）已完成。详见 [ROADMAP.md](./ROADMAP.md)。
 >
 > 后续计划用 Go + Vue 3 重写为 `txlc-console`，本仓库是那次重写的**可运行规格书**——行为契约见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)。
 
 ---
 
 ## 快速开始
+
+### 新机器：从 clone 到启动
+
+```bash
+git clone <仓库地址> dev-tools && cd dev-tools
+
+./install.sh                  # 复制 *.conf.example、建 services/logs/tmp、检查环境
+vim projects.conf             # 把示例路径改成本机路径（至少改「名字|目录」两列）
+./devctl.py doctor            # 环境 + 配置自检；有 FAIL 先按提示修复
+./devctl.sh start core        # 启动核心项目；或双击 服务控制台.app
+```
+
+不知道 `projects.conf` 怎么写时，可以先生成候选：
+
+```bash
+./install.sh --scan ~/java    # 扫描 Maven 工作区，项目名/路径/核心标记仍需人工确认
+```
+
+已有 `projects.conf` 时，扫描结果写到 `projects.conf.candidate`，不会覆盖现有配置。
+
+`doctor` 是**只读检查**：不启动服务、不改文件；`--env` 只查 Python/Java/Maven/Git/Node。检查内容包括配置目录是否存在、端口是否重复或已被占用、启动脚本与 jar 是否就位、`requires` 是否在 `deps.conf` 登记。退出码 0 表示没有 FAIL，可直接接 CI 或 Git 钩子。
+
+Windows 上把 `./install.sh` 换成 `install.cmd`、`./devctl.sh` 换成 `devctl.cmd`；`./devctl.py doctor` 相同。用 PyInstaller 打包后没有独立 Python 时，自检走 `TXLCConsole.exe --devctl doctor`。
+
+### 已经配置好之后：日常启动
 
 ```bash
 cd ~/java/dev-tools
@@ -19,14 +44,7 @@ python3 dashboard.py          # 启动服务（只用标准库）
 # 入口二：浏览器打开 http://localhost:18000 —— 网页版
 ```
 
-Windows 上等价入口：
-
-```bat
-rem 双击 app\windows\launch.cmd：后台起服务，再用 Edge/Chrome 的应用窗口打开
-rem 命令行方式：
-devctl.cmd status all
-devctl.cmd start core
-```
+Windows 上等价入口是双击 `app\windows\launch.cmd`：后台起服务，再用 Edge/Chrome 的应用窗口打开；命令行可用 `devctl.cmd status all` / `devctl.cmd start core`。
 
 `服务控制台.app` 会先确保服务在跑，再打开原生窗口；直接跑 `dashboard.py` 时只提供网页入口。
 
@@ -45,8 +63,7 @@ devctl.cmd start core
 
 | 依赖 | 用途 | 说明 |
 |---|---|---|
-| Python 3 | 控制台后端 | 只用标准库，无第三方包 |
-| Python 3 | `devctl.py` 核心 | macOS / Windows 共用；`devctl.sh`、`devctl.cmd` 只是转发 |
+| Python 3.8+ | 控制台后端 + `devctl.py` | 只用标准库，无第三方包；`install.sh` 与 `doctor` 会检查版本 |
 | JDK 17 | Java 服务 | 脚本按 `JAVA_HOME` 或常见安装位置查找 |
 | Maven | 构建 | 找不到时自动尝试 `~/dev-tools/apache-maven-*` |
 | Node + 包管理器 | 前端项目 | 按项目 install 列决定 npm/pnpm/yarn/bun |
@@ -99,12 +116,16 @@ App 菜单除了刷新，还提供：**在浏览器中打开（网页配置入�
 | `dashboard.html` | 单页前端，内联 CSS 与 JS（约 4,000 行） |
 | `devctl.py` | 进程与构建的实际执行者：启动/停止/重启/更新/热更新/状态 JSON |
 | `devctl.sh` / `devctl.cmd` | 兼容入口，只负责找 Python 并转发参数（macOS/Linux / Windows） |
+| `install.sh` / `install.cmd` | 首次初始化：复制配置模板、建运行目录、检查环境；`--scan` 生成项目候选 |
+| `doctor.py` | 环境与配置自检（只读）：打印 OK/WARN/FAIL，有 FAIL 时退出码非 0 |
+| `discover.py` | 扫描 Maven 工作区，输出 `projects.conf` 候选行（启发式，需人工确认） |
 | `console_platform.py` | 平台适配层：端口列表、进程树、终止、通知、目录选择、应用窗口、状态目录 |
 | `app/` | macOS 原生窗口外壳：`shell.swift`（WKWebView + 菜单）、`launcher.sh`、`build.sh`；`app/windows/` 提供 Windows 启动器与 PyInstaller 打包脚本 |
 | `logs/` | 控制台自身日志 `console.log`（运行时生成，已 gitignore） |
 | `tests/test_diagnostics.py` | 诊断清单、id 白名单、512KB 截断、诊断包不含配置 |
 | `tests/` | 标准库 `unittest` 用例（健康检查、探活、端口释放、配置写入、依赖闸门、分组、拓扑排序） |
 | `projects.conf` | 项目注册表（13 列，见下） |
+| `projects.conf.candidate` | `install.sh --scan` 在已有配置时的候选结果，确认后再替换（已 gitignore） |
 | `ports.conf` | 端口覆盖表：项目实际监听端口与 `projects.conf` 不同时用 |
 | `entries.conf` | 卡片背面的页面入口按钮 |
 | `health.conf` | 健康检查配置（首次保存时生成，未出现的项目用默认值） |
@@ -280,7 +301,7 @@ macOS / Linux 的状态目录是 `/tmp`（保持历史 pid/日志路径不变）
 - **Windows 未在真机验证**：执行路径、`devctl.cmd`、`%TEMP%\txlc` 状态目录、`.cmd` 前端脚本和 Edge/Chrome `--app` 窗口都已实现，但当前开发机是 macOS；`app/windows/build-exe.cmd` 的 PyInstaller 打包同样待 Windows 实测。
 - **前端是单文件**：CSS/JS 内联在 `dashboard.html`，无法单独测试、改动冲突概率高。
 - **无持久化**：任务历史与健康状态都在临时目录，控制台重启即丢。
-- **测试覆盖有限**：67 个用例覆盖健康检查、端口逻辑、依赖探活与闸门、分组展开、拓扑排序、诊断日志白名单与打包、devctl 配置/端口/jar/JSON、假项目启停与分平台前端脚本；Git 解析、前端交互逻辑尚无测试。
+- **测试覆盖有限**：99 个用例覆盖健康检查、端口逻辑、依赖探活与闸门、分组展开、拓扑排序、诊断日志白名单与打包、devctl 配置/端口/jar/JSON、假项目启停、分平台前端脚本，以及 `doctor` 的配置/环境/依赖检查；Git 解析、前端交互逻辑尚无测试。
 - **版本号是文件 mtime**：`/api/status` 的 `version` 用于前端自动刷新，不是语义化版本。
 - **依赖探活只到端口**：`tcp` 只判断端口可连，不代表库/账号/权限可用；`http` 只发一次 GET。
 - **编排进度只在内存**：控制台重启后 `ordered` 丢失；项目自身状态仍靠临时目录与端口推断。
@@ -303,3 +324,5 @@ macOS / Linux 的状态目录是 `/tmp`（保持历史 pid/日志路径不变）
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+首次换机器时先跑 `./install.sh && ./devctl.py doctor`；测试不依赖真实配置与真实服务。

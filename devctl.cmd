@@ -9,6 +9,7 @@ rem
 rem 用法（与 macOS 的 devctl.sh 一致）：
 rem   devctl.cmd list
 rem   devctl.cmd json
+rem   devctl.cmd doctor [--env]
 rem   devctl.cmd start all
 rem   devctl.cmd stop core
 

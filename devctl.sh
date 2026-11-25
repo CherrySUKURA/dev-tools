@@ -7,6 +7,7 @@
 # 用法与以前完全一致：
 #   ./devctl.sh list
 #   ./devctl.sh json
+#   ./devctl.sh doctor [--env]
 #   ./devctl.sh start|stop|restart|update [项目|all|core]
 #
 # Windows 对应入口是 devctl.cmd。

@@ -15,6 +15,7 @@ logs/
 # 真实配置不进公共仓库：含本机绝对路径与内网地址。
 # 首次使用请从同名 .example 复制，例如 cp projects.conf.example projects.conf
 projects.conf
+projects.conf.candidate
 ports.conf
 entries.conf
 health.conf

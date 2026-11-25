@@ -9,7 +9,7 @@
 | 代码规模 | `devctl.py` 约 1230 行（含注释）、`dashboard.py` 约 4100 行、`dashboard.html` 约 5600 行 |
 | 已有能力 | 启停/重启/更新、热更新、日志、Git 弹窗（分支/拉取/stash/冲突解决/diff）、项目增删改、端口覆盖、页面入口、前端项目、异步任务、健康巡检、端口面板、外部依赖闸门、分组与依赖顺序、批量操作与搜索 |
 | 技术债 | 前端仍是单文件、状态仍在临时目录、配置仍是自定义竖线格式、`dashboard.py` 仍偏大 |
-| 跨平台 | 进程/端口/通知/目录选择已收进 `console_platform.py`；核心迁到 `devctl.py`；Windows 有 `devctl.cmd` 与 `app/windows/launch.cmd`（未在真机验证） |
+| 跨平台 | 进程/端口/通知/目录选择已收进 `console_platform.py`；核心迁到 `devctl.py`；Windows 有 `devctl.cmd` 与 `app/windows/launch.cmd`（未在真机验证）；新机器有 `install.sh` / `install.cmd` 与 `devctl.py doctor` |
 
 结论：功能不算"薄"，薄在**运维闭环**（起得来但崩了没人管、没有中间件托管、没有分组和顺序）和**平台绑定**。
 
@@ -230,6 +230,26 @@ P2 的 12、13：核心逻辑从 bash 迁到 Python，并补齐 Windows 执行�
 
 - Windows 分支没有在真机跑过；`devctl.cmd`、`.cmd` 前端脚本、`%TEMP%` 状态目录、PyInstaller 打包都需要一台 Windows 机器做一次冒烟。
 - `services/` 里已有的旧 bash 脚本不会自动迁移；在 Windows 上新增项目时才会生成 `.cmd`。
+
+### S3.5 已完成（2026-11-25）
+
+补上「换一台机器后怎么开始」：不是安装包，而是约一百行 bootstrap + 一个只读自检。
+
+| 交付 | 位置 | 验收方式 |
+|---|---|---|
+| 初始化脚本 | `install.sh` / `install.cmd` | 复制 `*.conf.example`（已存在不覆盖）、建 `services/logs/tmp`、检查 Python/Java/Maven/Git/Node |
+| 工作区扫描 | `install.sh --scan <目录>` / `discover.py` | 识别 Spring Boot server 模块生成候选；已有配置时只写 `projects.conf.candidate` |
+| 环境与配置自检 | `devctl.py doctor [--env]` / `doctor.py` | 目录缺失、端口重复/占用、脚本与 jar、`requires` 与 `deps.conf`；FAIL 退出码非 0 |
+| 空配置提示 | `devctl.py list` / `status` | 不再只报「未知项目」，而是提示编辑配置或 `--scan`；`json` 仍只输出 `[]` |
+| 单元测试 | `tests/test_doctor.py`（32 用例） | 缺失/空配置、目录、重名、端口、脚本、前端、依赖、环境分级；全套 99 个用例通过 |
+
+设计取舍：
+
+- **先做配置与环境，不做导出/导入**：迁移摩擦的主要来源是路径和工具链，不是配置格式。
+- **doctor 独立成模块**：不 import `dashboard.py`，避免自检顺手拉起 HTTP 服务；只复用 `devctl.py` 的解析与探测。
+- **初始化不碰已有配置**：所有复制都带「文件已存在则跳过」，扫描结果也不能直接覆盖 `projects.conf`。
+- **WARN 不阻塞**：Java 缺失且有后端项目才 FAIL；Maven/Git 缺失、端口被 IDE 占用只警告，保留「先试启动」的空间。
+- **Windows 脚本同步给到但未真机验证**：`install.cmd` 与 `install.sh` 行为一一对应。
 
 ### 下一步（P4 / S4）
 
