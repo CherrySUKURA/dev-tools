@@ -136,6 +136,9 @@ devctl.sh（bash 核心）
 - `POST /api/ports/kill` 只允许释放**当前真实监听**的端口，禁止杀控制台自身与 PID 0/1。
 - `POST /api/health` 写入 `health.conf` 时，非法输入必须拒绝而不是写坏文件。
 - `GET /api/diagnostics*` 只接受**本次清单登记过的 id**（路径 sha1 前 12 位），不能拿 id 读任意文件；清单本身也只列真实存在的日志。`POST /api/diagnostics/export` 每个文件最多 512KB，且**不得包含 `*.conf`**。
+- 诊断面板与项目日志弹窗必须**读同一个文件、同样 1200 行、同一套过滤/高亮**；诊断条目带 `source`/`kind`（启动/操作/应用/错误日志）时，前端用它在项目日志弹窗里打开同一来源，不允许维护两套读取逻辑。
+- 控制台重启后诊断 id 会重新生成：前端遇到「条目已过期」要重载清单，不能每 2 秒重复请求旧 id。
+- 只读轮询接口（`/api/status`、`/api/log`、`/api/job*`、`/api/diagnostics*`）成功时不写访问日志（`QUIET_POLL_PATHS`），否则 `console.log` 会被 1~2 秒一次的轮询刷满。
 - 控制台自身日志必须落盘（`logs/console.log`），不能只依赖启动器的 stdout 重定向——那个文件在临时目录，重启机器就没了。
 
 ### 6.2 配置

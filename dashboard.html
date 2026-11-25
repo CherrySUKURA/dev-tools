@@ -1527,6 +1527,33 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .diag-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 7px 14px;
+    background: var(--surface-soft);
+    border-bottom: 1px solid var(--line);
+  }
+  .diag-tools input[type="text"] {
+    flex: 1 1 180px;
+    min-width: 140px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+  }
+  .diag-tools select {
+    padding: 5px 8px;
+    font-size: 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+  }
+  .diag-check { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); font-size: 12px; }
+  .diag-summary { display: flex; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 11.5px; }
+  .diag-summary .bad { color: #b91c1c; font-weight: 700; }
+  .diag-summary .warn { color: #b45309; font-weight: 700; }
   .diag-tail {
     flex: 1;
     min-height: 0;
@@ -2121,8 +2148,21 @@
         <div class="diag-view-head">
           <strong id="diag-file">选择左侧文件查看</strong>
           <span class="diag-path" id="diag-path"></span>
+          <button id="diag-open-project" class="link-btn hidden" onclick="openDiagAsProjectLog()">在项目日志中打开</button>
           <a id="diag-download" class="link-btn hidden" href="#" download>下载</a>
-          <button class="link-btn" onclick="refreshDiagTail()">刷新内容</button>
+          <button class="link-btn" onclick="refreshDiagTail()">刷新</button>
+        </div>
+        <!-- 与项目日志弹窗同一套过滤/高亮：同一个文件在两处看到的内容必须一致。 -->
+        <div class="diag-tools">
+          <input id="diag-keyword" type="text" placeholder="关键字过滤（支持多个，空格分隔）" oninput="renderDiagView()">
+          <select id="diag-level" onchange="renderDiagView()">
+            <option value="all">全部级别</option>
+            <option value="error">只看 ERROR</option>
+            <option value="warn">ERROR + WARN</option>
+          </select>
+          <label class="diag-check"><input type="checkbox" id="diag-errors-only" onchange="renderDiagView()"> 只看报错</label>
+          <label class="diag-check"><input type="checkbox" id="diag-auto" checked onchange="ensureDiagTimer()"> 自动刷新</label>
+          <span id="diag-summary" class="diag-summary"></span>
         </div>
         <pre id="diag-tail" class="diag-tail">左侧选择一个日志文件…</pre>
       </section>
@@ -2191,6 +2231,8 @@ const state = {
   diagEntries: [], // 诊断面板的日志清单：控制台 / 任务 / 项目 / 健康 / 应用
   diagGroups: [], // 诊断分组顺序与中文名（后端下发）
   diagSelected: null, // 当前查看的日志 id
+  diagContent: "", // 当前日志的原始内容；过滤/高亮只在本地重排，不再请求
+  diagTimer: null, // 诊断面板的自动刷新定时器（与项目日志同为 2 秒）
   watchOverride: {}, // 热更新操作成功后短暂覆盖状态缓存，避免按钮闪回
   portOverride: {}, // 端口保存后短暂覆盖状态缓存，避免旧轮询结果把端口翻回去
   listTab: "backend", // 当前页签：backend | frontend
@@ -3594,7 +3636,7 @@ async function refreshLog(scrollBottom = false) {
     const query = new URLSearchParams({
       project: state.logProject,
       kind,
-      lines: "1200",
+      lines: String(LOG_VIEW_LINES),
     });
     if (state.logSource) query.set("source", state.logSource);
 
@@ -5115,7 +5157,11 @@ async function shutdownPanel() {
 // 也能一次性导出诊断包（不含 *.conf）。
 // ---------------------------------------------------------------
 
-/// 把字节数格式化成 KB/MB，左侧清单里显示日志大小用。
+/// 日志查看统一的行数：项目日志弹窗和诊断面板都读这么多，
+// 同一个文件在两处必须看到同样的内容（以前 1200 / 800 不一致）。
+const LOG_VIEW_LINES = 1200;
+
+// 把字节数格式化成 KB/MB，左侧清单里显示日志大小用。
 function formatSize(bytes) {
   const value = Number(bytes) || 0;
   if (value < 1024) return `${value} B`;
@@ -5138,10 +5184,29 @@ function openDiag() {
   $("diag-panel").classList.remove("hidden");
   // 每次打开都重新取清单：服务刚重启过时，任务/日志文件可能已经变了。
   loadDiagnostics(true);
+  ensureDiagTimer();
 }
 
 function hideDiag() {
   $("diag-panel").classList.add("hidden");
+  // 面板关掉就不再轮询，避免后台一直读日志文件。
+  if (state.diagTimer) {
+    clearInterval(state.diagTimer);
+    state.diagTimer = null;
+  }
+}
+
+/// 自动刷新开关：与项目日志弹窗同节奏（2 秒），只刷新当前选中文件。
+function ensureDiagTimer() {
+  if (state.diagTimer) {
+    clearInterval(state.diagTimer);
+    state.diagTimer = null;
+  }
+  if (!$("diag-auto") || !$("diag-auto").checked) return;
+  state.diagTimer = setInterval(() => {
+    if ($("diag-panel").classList.contains("hidden")) return;
+    if (state.diagSelected) refreshDiagTail(true);
+  }, 2000);
 }
 
 /// 拉取日志清单并渲染左侧列表。
@@ -5158,7 +5223,10 @@ async function loadDiagnostics(keepSelection) {
     const count = $("diag-count");
     if (count) count.textContent = `${state.diagEntries.length} 个`;
     renderDiagList();
-    if (!keepSelection || !state.diagSelected) {
+    // 控制台重启后诊断 id 会重新生成：刷新清单时如果旧 id 已不存在就回到第一个文件，
+    // 否则自动刷新会一直拿旧 id 请求，每 2 秒刷一条 404。
+    const stillExists = state.diagEntries.some((entry) => entry.id === state.diagSelected);
+    if (!keepSelection || !state.diagSelected || !stillExists) {
       state.diagSelected = state.diagEntries.length ? state.diagEntries[0].id : null;
     }
     if (state.diagSelected) {
@@ -5221,21 +5289,73 @@ function selectDiag(id) {
   download.href = `/api/diagnostics/file?id=${encodeURIComponent(id)}`;
   download.download = entry.name;
   download.classList.remove("hidden");
-  refreshDiagTail();
+  // 项目类日志（启动/操作/应用/错误）能对应到项目日志弹窗的来源，给出跳转，
+  // 需要过滤、导出、切来源时去那边继续看，避免两个查看器各有一套行为。
+  $("diag-open-project").classList.toggle("hidden", !entry.source);
+  state.diagContent = "";
+  $("diag-summary").textContent = "正在读取…";
+  refreshDiagTail(true);
+}
+
+/// 跳到项目日志弹窗，定位到同一个文件（同一套过滤/自动刷新/导出）。
+function openDiagAsProjectLog() {
+  const entry = state.diagEntries.find((item) => item.id === state.diagSelected);
+  if (!entry || !entry.project || !entry.source) return;
+  hideDiag();
+  openLog(entry.project, entry.kind === "action" ? "action" : "service", entry.source);
 }
 
 /// 重新拉当前文件的末尾内容（日志在写，需要手动/自动刷新）。
-async function refreshDiagTail() {
+/// 只缓存原文，渲染交给 renderDiagView，和项目日志弹窗共用一套过滤/高亮。
+async function refreshDiagTail(scrollBottom = false) {
   if (!state.diagSelected) return;
-  const tail = $("diag-tail");
   try {
-    const data = await api(`/api/diagnostics/tail?id=${encodeURIComponent(state.diagSelected)}&lines=800`);
-    // 文件可能刚被轮转/删除，后端会给 404，这里保持原内容并提示。
-    tail.textContent = data.content || "（文件为空）";
-    tail.scrollTop = tail.scrollHeight; // 默认看最新
+    const data = await api(`/api/diagnostics/tail?id=${encodeURIComponent(state.diagSelected)}&lines=${LOG_VIEW_LINES}`);
+    state.diagContent = data.content || "";
+    renderDiagView(scrollBottom);
   } catch (e) {
-    tail.textContent = `读取失败：${e.message}`;
+    $("diag-tail").textContent = `读取失败：${e.message}`;
+    $("diag-summary").textContent = "";
+    // 条目过期说明控制台重启过：重载清单换新 id，避免自动刷新一直 404。
+    if (String(e.message).includes("过期")) loadDiagnostics(true);
   }
+}
+
+/// 按诊断面板自己的关键字/级别/只看报错渲染，复用项目日志弹窗的渲染函数，
+/// 保证同一个文件两边看到的高亮、报错统计完全一致。
+function renderDiagView(scrollBottom = false) {
+  const tail = $("diag-tail");
+  const errorsOnly = $("diag-errors-only") ? $("diag-errors-only").checked : false;
+  const keyword = $("diag-keyword") ? $("diag-keyword").value : "";
+  const level = $("diag-level") ? $("diag-level").value : "all";
+  const previousTop = tail.scrollTop;
+  const atBottom = tail.scrollTop + tail.clientHeight >= tail.scrollHeight - 40;
+
+  if (!state.diagSelected) {
+    tail.textContent = "左侧选择一个日志文件…";
+    return;
+  }
+  if (!state.diagContent) {
+    tail.textContent = "（文件为空，服务启动并产生输出后会出现内容）";
+    $("diag-summary").textContent = "";
+    return;
+  }
+
+  const rendered = renderLogContent(state.diagContent, errorsOnly, keyword, level);
+  if (rendered.shown === 0) {
+    tail.innerHTML = '<span class="log-line">当前筛选条件下没有匹配的行，可清空关键字或把级别调回“全部级别”。</span>';
+  } else {
+    tail.innerHTML = rendered.html;
+  }
+
+  const parts = [`<span>显示 ${rendered.shown}/${rendered.total} 行</span>`];
+  if (rendered.errors > 0) parts.push(`<span class="bad">报错 ${rendered.errors}</span>`);
+  else parts.push("<span>未发现报错</span>");
+  if (rendered.warnings > 0) parts.push(`<span class="warn">警告 ${rendered.warnings}</span>`);
+  $("diag-summary").innerHTML = parts.join("");
+
+  if (scrollBottom || atBottom) tail.scrollTop = tail.scrollHeight;
+  else tail.scrollTop = previousTop;
 }
 
 /// 导出诊断包：后端打包 zip（每个日志取末尾 512KB，不含配置文件）。

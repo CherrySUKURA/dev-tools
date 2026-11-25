@@ -45,6 +45,12 @@ WATCH_DIR = Path("/tmp/txlc-dashboard/watch")
 # 控制台自身的日志目录：跟业务项目日志分开，重启后还能查；按大小轮转。
 # 业务日志仍在项目目录/临时目录，诊断面板会把它们汇总到一起。
 LOG_DIR = Path(os.environ.get("TXLC_LOG_DIR") or (BASE_DIR / "logs"))
+# 页面每 1~2 秒轮询一次的只读接口：成功请求不写访问日志，否则一天上万行，
+# 真正的报错会被挤掉。失败的请求（非 200）仍然记录。
+QUIET_POLL_PATHS = frozenset({
+    "/api/status", "/api/log", "/api/job", "/api/jobs",
+    "/api/diagnostics", "/api/diagnostics/tail",
+})
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("TXLC_DASHBOARD_PORT", "18000"))
 # 控制台对外展示、生成给浏览器打开的本地地址使用的主机名。
@@ -2228,7 +2234,7 @@ DIAG_INDEX = {}  # 诊断 id -> 文件路径；只有登记过的路径允许被
 DIAG_GROUPS = [
     ("console", "控制台"),
     ("job", "任务"),
-    ("project", "项目输出"),
+    ("project", "项目日志"),
     ("health", "健康巡检"),
     ("app", "应用日志"),
 ]
@@ -2240,8 +2246,13 @@ def diag_id(path):
     return hashlib.sha1(str(resolved).encode("utf-8")).hexdigest()[:12]
 
 
-def _add_diag(entries, seen, group, label, path, project=""):
-    """登记一个日志文件；不存在或重复的静默跳过。"""
+def _add_diag(entries, seen, group, label, path, project="", source="", kind="service"):
+    """登记一个日志文件；不存在或重复的静默跳过。
+
+    source/kind 只在能对应到「项目日志弹窗」的来源时填写（启动日志、操作日志、
+    应用/错误/调试日志），前端据此提供「在项目日志中打开」，避免同一个文件
+    有两个功能不一致的查看器。
+    """
     candidate = Path(path).expanduser()
     try:
         if not candidate.is_file():
@@ -2259,6 +2270,8 @@ def _add_diag(entries, seen, group, label, path, project=""):
         "group": group,
         "label": label,
         "project": project,
+        "source": source,
+        "kind": kind,
         "name": candidate.name,
         "path": str(candidate),
         "size": stat.st_size,
@@ -2310,13 +2323,17 @@ def diagnostics_entries():
         name = project.get("name") or ""
         if not name:
             continue
-        _add_diag(entries, seen, "project", "服务输出", project.get("log") or f"/tmp/{name}.log", name)
-        _add_diag(entries, seen, "project", "启停操作", f"/tmp/{name}.action.log", name)
+        # 标签与项目日志弹窗的来源名保持一致：启动日志 / 操作日志 / 应用日志 / 错误日志。
+        _add_diag(entries, seen, "project", "启动日志",
+                  project.get("log") or f"/tmp/{name}.log", name, "startup", "service")
+        _add_diag(entries, seen, "project", "操作日志",
+                  f"/tmp/{name}.action.log", name, "action", "action")
         _add_diag(entries, seen, "health", "健康巡检", health_log_path(name, "health"), name)
         for kind, sources in (project.get("log_sources") or {}).items():
             for source in sources:
                 if source.get("path"):
-                    _add_diag(entries, seen, "app", source.get("label") or kind, source["path"], name)
+                    _add_diag(entries, seen, "app", source.get("label") or kind,
+                              source["path"], name, source.get("key") or kind, "service")
 
     order = {key: index for index, (key, _) in enumerate(DIAG_GROUPS)}
     entries.sort(key=lambda item: (order.get(item["group"], 99), -item["mtime"]))
@@ -3490,9 +3507,9 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # 访问日志也进 logs/console.log；StreamHandler 同时保留终端输出。
         message = fmt % args
-        # 前端 1 秒轮询 /api/status，成功的轮询不记（一天能刷上万行，把真正的报错挤掉）；
-        # 非 200 的轮询仍然记录，排障时能看出是哪一次开始出问题。
-        if "/api/status" in message and " 200 " in message:
+        # 状态轮询、日志尾巴刷新这类只读请求，成功时不写日志（见 QUIET_POLL_PATHS）；
+        # 非 200 的仍然记录，排障时能看出是哪一次开始出问题。
+        if " 200 " in message and self.path.split("?")[0] in QUIET_POLL_PATHS:
             logger.debug("%s %s", self.address_string(), message)
             return
         logger.info("%s %s", self.address_string(), message)
@@ -3638,9 +3655,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(404, {"error": "日志条目已过期，请刷新诊断面板"})
                     return
                 try:
-                    lines = int((qs.get("lines") or ["400"])[0])
+                    lines = int((qs.get("lines") or ["1200"])[0])
                 except ValueError:
-                    lines = 400
+                    lines = 1200
                 lines = max(50, min(lines, 5000))
                 self.send_json(200, {
                     "content": tail_file(entry_path, lines),
@@ -3666,7 +3683,7 @@ class Handler(BaseHTTPRequestHandler):
                 if project_name not in project_names():
                     self.send_json(400, {"error": "未知项目"})
                     return
-                lines = int((qs.get("lines") or ["300"])[0])
+                lines = int((qs.get("lines") or ["1200"])[0])
                 lines = max(20, min(lines, MAX_LOG_LINES))
                 kind = (qs.get("kind") or ["service"])[0]
                 if kind not in ("service", "action"):

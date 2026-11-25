@@ -94,6 +94,23 @@ class DiagnosticsTest(unittest.TestCase):
         job_labels = [e["label"] for e in entries if e["group"] == "job"]
         self.assertIn("update · svc-demo", job_labels)
 
+    def test_startup_entry_maps_to_project_log_source(self):
+        """启动日志条目带 source/kind，前端据此跳到项目日志弹窗的同一来源。
+
+        两处查看器（诊断面板 / 项目日志）必须能互相定位到同一个文件，
+        否则同一项目会出现「两个地方看到的日志不一样」。
+        """
+        entries = dashboard.diagnostics_entries()
+        startup = next(e for e in entries if e["label"] == "启动日志")
+        self.assertEqual(startup["project"], "svc-demo")
+        self.assertEqual(startup["source"], "startup")
+        self.assertEqual(startup["kind"], "service")
+        self.assertEqual(startup["path"], str(self.project_log))
+
+        app = next(e for e in entries if e["label"] == "应用日志")
+        self.assertEqual(app["source"], "app")
+        self.assertEqual(app["kind"], "service")
+
     def test_id_is_path_hash_and_whitelisted(self):
         """id 是路径哈希；只有本次清单登记过的 id 才能还原成路径。"""
         entries = dashboard.diagnostics_entries()
